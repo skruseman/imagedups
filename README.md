@@ -1,3 +1,3 @@
 # imagedups
 
-Locate image duplicates across file systems. - Mar. 2026
+Locate image file duplicates across file systems. - Mar. 2026
