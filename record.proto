@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package demo;
+
+message UserRecord {
+    uint32 schema_version = 1;
+    string user_id = 2;
+    string name = 3;
+    string email = 4;
+    repeated string tags = 5;
+    int64 updated_unix_ts = 6;
+}
