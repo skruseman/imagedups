@@ -36,32 +36,39 @@ def generate_id() -> str:
     # return str(uuid.uuid4())
     return f'id_{('000' + str(last_id))[-4:]}'
 
-def hash_file(from_queue: queue.Queue[File|object],
-              to_queue: queue.Queue[File]):
+def hash_files(from_queue: queue.Queue[File | object],
+               to_queue: queue.Queue[File]):
 
     global last_hash
 
     worker_name = threading.current_thread().name
 
-    while True:
-        file = from_queue.get()
-        try:
+    try:
+        while True:
+            try:
+                file = from_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+
             if file is SENTINEL:
+                from_queue.task_done()
                 return
             assert isinstance(file, File)
 
-            try:
-                file.hash_worker = worker_name
+            file.hash_worker = worker_name
 
-                last_hash += 1
-                file.hash = f'hash_{('000' + str(last_hash))[-4:]}'
-                # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)
-            except Exception as exc:  # queue.Empty ?
-                file.hash_error = f"{type(exc).__name__}: {exc}"
+            last_hash += 1
+            file.hash = f'hash_{('000' + str(last_hash))[-4:]}'
+            # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)
 
+            # except Exception as exc:  # queue.Empty ?
+            #     file.hash_error = f"{type(exc).__name__}: {exc}"
+
+            from_queue.task_done()
             to_queue.put(file)
 
-        finally:
+    finally:
+        while from_queue.unfinished_tasks:
             from_queue.task_done()
 
 
@@ -107,24 +114,33 @@ def process_hashed_files(hashed_files: queue.Queue[File], dirs_by_path: dict[str
 
 
 def handle_dir(path: str, subdirs: list[str], files: list[str],
-               dirs_by_path: dict[str, Dir]):
+               dirs_by_path: dict[str, Dir], fth_queue: queue.Queue[File|object]):
 
     print(f'Handling dir {path}')
 
     dir = Dir(
         id=generate_id(),
-        path=path,
         run_id=RUN_ID,
+        path=path,
         num_files=len(files),
-        files_found=bool(files),
-        dirs = [],
-        files = [],
+        num_dirs=len(subdirs),
+        # files_found=bool(files),
+        dir_ids = [],
+        file_ids= [],
+        # dir_hashes = [],
+        # file_hashes = [],
     )
 
     dirs_by_path[path] = dir
 
     # dir['subdirs'] = sorted(subdirs)
-    # dir['files'] = sorted(files)
+
+
+    for name in subdirs:
+        path = str(pathlib.Path(path, name))
+        subdir = dirs_by_path[path]
+        subdir.parent = dir
+        dir.dir_ids.append(subdir.id)
 
 
     # file_hashes = []
@@ -142,23 +158,16 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
             parent=dir,
             run_id=RUN_ID,
         )
-        dir.files.append(file)
+        dir.file_ids.append(file.id)
 
         # push the file obj for hashing
-        pass
-
-
-    # subdir_hashes = []
-    # for subdir_name in dir['subdirs']:
-    #     subdir_path = os.path.join(path, subdir_name)
-    #     subdir = dirs_by_path[subdir_path]
-    #     subdir_hashes.append(subdir['hash'])  # same order as subdir names
-
-    for name in subdirs:
-        path = str(pathlib.Path(path, name))
-        subdir = dirs_by_path[path]
-        subdir.parent = dir  # or just its ID?
-        dir.dirs.append(subdir)
+        try:
+            fth_queue.put(file)
+        except queue.Full:
+            print(f'Queue of files to hash is full.')
+        except Exception as e:
+            pass
+            return
 
     # # calculate hash of concatenated file hashes
     # files_hash_input = ''.join(sorted(file_hashes))
@@ -177,8 +186,8 @@ def create_dir_info(path: str, dirs: list[str]):
 
 def main() -> None:
 
-    num_hash_workers = 2
-    max_hash_queue_size = 5
+    num_hash_workers = 1
+    max_hash_queue_size = 10
 
     dirs_by_path: dict[str, Dir] = dict()
 
@@ -192,13 +201,16 @@ def main() -> None:
     # create hash workers
     hash_workers = [
         threading.Thread(
-            target=hash_file(),
+            target=hash_files,
             name=f"hash-worker-{i+1}",
             args=(fth_queue, fh_queue),
             daemon=False,
         )
         for i in range(num_hash_workers)
     ]
+
+    for w in hash_workers:
+        w.start()
 
     # started = time.perf_counter()
 
@@ -214,14 +226,13 @@ def main() -> None:
     pass
 
 
-    for fs_item in os.walk(start_dir, topdown=False):
-        handle_dir(*fs_item, dirs_by_path)
-
     # walk the flattened dir tree where each dir can access values
     # (hashes) of its subdirs
     try:
-        for dir_obj in a:
-            pass
+
+        for fs_item in os.walk(start_dir, topdown=False):
+            root, dirs, files = fs_item
+            handle_dir(root, dirs, files, dirs_by_path, fth_queue)
 
             # generate dir ID (if not already)
             # include the run ID
@@ -261,6 +272,15 @@ def main() -> None:
         for worker in hash_workers:
             fth_queue.put(SENTINEL)
 
+        fth_queue.join()
+
+        # wait for the workers to finish
+        # for worker in hash_workers:
+        #     worker.join()
+
+        pass
+
+    pass
 
 if __name__ == "__main__":
     main()

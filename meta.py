@@ -31,14 +31,19 @@ class Dir:
     id: str  # 36 , str(uuid.uuid4()) ; prepend with run id?
     run_id: str  # 36
     path: str
-    # parent: Optional[Dir]  # None for top dir
-    dirs: list[Dir]
-    files: list[File]
-    num_files: int = 0
-    files_found: bool = False  #
 
+    num_files: int
+    num_dirs: int
+    dir_ids: list[str]
+    file_ids: list[str]
+
+    parent: Optional[Dir] = None  # None for top dir
+
+    # files_found: bool = False  #
+    dir_hashes: list[str] = dataclasses.field(default_factory=list)
     file_hashes: list[str] = dataclasses.field(default_factory=list)
-    local_hash: Optional[bytes] = None  # 8 for xxhash.xxh3_64
+    files_hash: Optional[str] = None  # 8 bytes for xxhash.xxh3_64
+    dirs_hash: Optional[str] = None  # 8 bytes for xxhash.xxh3_64
 
     # timestamp: float
 
