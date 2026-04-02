@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
 import queue
@@ -26,23 +27,29 @@ class Run:
 
 @dataclass(frozen=False)
 class Dir:
-    name: str
+    # name: str
     id: str  # 36 , str(uuid.uuid4()) ; prepend with run id?
     run_id: str  # 36
     path: str
-    parent: Optional[Dir]  # None for top dir
+    # parent: Optional[Dir]  # None for top dir
     dirs: list[Dir]
-    files: list[str]
-    local_hash: bytes  # 8 for xxhash.xxh3_64
-    timestamp: float
+    files: list[File]
+    num_files: int = 0
     files_found: bool = False  #
+
+    file_hashes: list[str] = dataclasses.field(default_factory=list)
+    local_hash: Optional[bytes] = None  # 8 for xxhash.xxh3_64
+
+    # timestamp: float
 
 @dataclass(frozen=False)
 class File:
-    name: str
     id: str
+    name: str
     run_id: str
     parent: Dir
-    lenght: int
-    hash: bytes
-    timestamp: float
+    length: int = -1
+    hash: str = ""
+    hash_worker: str = ""
+    hash_error: str = ""
+    # timestamp: float
