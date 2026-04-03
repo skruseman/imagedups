@@ -17,7 +17,7 @@ SENTINEL = object()
 STOP_EVENT = threading.Event()
 
 num_hash_workers = 4
-max_hash_queue_size = 50
+max_hash_queue_size = 12
 
 last_id: int = 0
 
@@ -114,6 +114,30 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
     return num_files_pushed
 
 
+def store(file_queue: queue.Queue[File|object], sentinel: object):
+    num_files_processed: int = 0
+
+    while True:
+        try:
+            file = file_queue.get(timeout=1)
+        except queue.Empty:
+            continue
+
+        if file is sentinel:
+            print(f'store worker received sentinel', flush=True)
+            file_queue.task_done()
+            break
+
+        assert isinstance(file, File)
+
+        # for now no actual storage
+        print(f'File {file.id} has hash {file.hash[:8]}', flush=True)
+        file_queue.task_done()
+        num_files_processed += 1
+
+    print(f'Processed {num_files_processed} files', flush=True)
+
+
 def main() -> None:
 
     num_dirs_processed = 0
@@ -128,7 +152,7 @@ def main() -> None:
     fth_queue: queue.Queue[File|object] = queue.Queue(maxsize=max_hash_queue_size)
 
     # create queue for hashed files
-    fh_queue: queue.Queue[File] = queue.Queue()
+    fh_queue: queue.Queue[File|object] = queue.Queue()
 
     # create hash workers
     hash_workers = [
@@ -153,8 +177,13 @@ def main() -> None:
     # storage_queue: queue.Queue[Dir] = queue.Queue()
 
     # create storage worker
-    pass
-
+    store_worker = threading.Thread(
+        target=store,
+        name='store-worker',
+        args=(fh_queue, SENTINEL),
+        daemon=False,
+    )
+    store_worker.start()
 
     # start monitor thread
     monitor = threading.Thread(
@@ -174,26 +203,35 @@ def main() -> None:
             num_dirs_processed += 1
 
     finally:
-        # make the workers finish their work
+        # make the workers finish
         for _ in hash_workers:
             fth_queue.put(SENTINEL)
         print('Sentinel(s) sent to queue of files to hash', flush=True)
 
-        # wait for the queue to be empty
+        # wait for the hash queue to be empty
         fth_queue.join()
         print('Queue of files to hash is empty', flush=True)
 
-        # wait for the workers to finish
+        # wait for the hash workers to finish
         for worker in hash_workers:
             worker.join()
         print('All hash workers finished', flush=True)
 
+        # make the store worker finish
+        fh_queue.put(SENTINEL)
+        print('Sentinel pushed to queue of hashed files', flush=True)
+
+        # wait for the store queue to be empty
+        fh_queue.join()
+        print('Queue of hashed files is empty', flush=True)
+
+        # wait for the store worker to finish
+        store_worker.join()
+        print('Store worker finished', flush=True)
+
         # make the monitor thread finish
         STOP_EVENT.set()
 
-        pass
-
-    pass
     print(f'{num_dirs_processed} dirs processed', flush=True)
     print(f'{num_files_pushed_for_hashing} files pushed', flush=True)
 

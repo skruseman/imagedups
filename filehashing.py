@@ -34,7 +34,7 @@ def hash_file(path: pathlib.Path) -> str:
     hash = hashlib.sha256(to_hash).hexdigest()
 
     # variable sleep time
-    time.sleep(1 + random() * 3)
+    time.sleep(0.25 + random() * 1)
 
     return hash
 
@@ -69,7 +69,7 @@ def hash_files(from_queue: queue.Queue[File | object],
             #     file.hash_error = f"{type(exc).__name__}: {exc}"
 
             from_queue.task_done()
-            # to_queue.put(file)
+            to_queue.put(file)
 
     except ShutDown:
         print(f'{worker_name} being shut down', flush=True)
