@@ -21,7 +21,7 @@ max_hash_queue_size = 10
 last_id: int = 0
 
 start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
-start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
+# start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
 
 
 # generate run ID as yyyyMMdd:hhmmssuuu of start (wall) time
@@ -168,6 +168,8 @@ def main() -> None:
         pass
 
     pass
+    print(f'{num_dirs_processed} dirs processed', flush=True)
+    print(f'{num_files_pushed_for_hashing} files pushed', flush=True)
 
 if __name__ == "__main__":
     main()
