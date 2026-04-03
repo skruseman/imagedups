@@ -58,9 +58,10 @@ def hash_files(from_queue: queue.Queue[File | object],
                 return
             assert isinstance(file, File)
 
-            print(f'{worker_name} about to hash file {file.id}: {file.path}', flush=True)
             file.hash_worker = worker_name
-            file.hash = hash_file(file.path)
+            file_path = file.parent.path / file.name
+            print(f'{worker_name} about to hash file {file.id}: {file_path}', flush=True)
+            file.hash = hash_file(file_path)
 
             # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)
 

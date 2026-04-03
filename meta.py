@@ -52,7 +52,7 @@ class Dir:
 class File:
     id: str
     name: str
-    path: pathlib.Path
+    # path: pathlib.Path
     run_id: str
     parent: Dir
     length: int = -1

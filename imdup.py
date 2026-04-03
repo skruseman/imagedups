@@ -78,7 +78,7 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
             id=generate_id(),
             name=name,
             parent=_dir,
-            path=pathlib.Path(path, name),
+            # path=pathlib.Path(path, name),
             run_id=RUN_ID,
         )
         _dir.file_ids.append(file.id)
