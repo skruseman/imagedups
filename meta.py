@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import os
+import pathlib
 import queue
 import threading
 import time
@@ -30,12 +31,12 @@ class Dir:
     # name: str
     id: str  # 36 , str(uuid.uuid4()) ; prepend with run id?
     run_id: str  # 36
-    path: str
+    path: pathlib.Path
 
     num_files: int
     num_dirs: int
-    dir_ids: list[str]
     file_ids: list[str]
+    dir_ids: list[str]
 
     parent: Optional[Dir] = None  # None for top dir
 
@@ -51,6 +52,7 @@ class Dir:
 class File:
     id: str
     name: str
+    path: pathlib.Path
     run_id: str
     parent: Dir
     length: int = -1

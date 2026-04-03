@@ -9,17 +9,19 @@ from typing import Optional
 
 from meta import Dir, File, Run
 
+from filehashing import hash_files
+from dirhashing import process_hashed_files  # hash_dirs?
 
 RUN_ID = '42'
 SENTINEL = object()
 
+num_hash_workers = 4
+max_hash_queue_size = 10
 
 last_id: int = 0
-last_hash: int = 0
 
 start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
-
-# dirs_by_path = dict()
+start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
 
 
 # generate run ID as yyyyMMdd:hhmmssuuu of start (wall) time
@@ -36,166 +38,82 @@ def generate_id() -> str:
     # return str(uuid.uuid4())
     return f'id_{('000' + str(last_id))[-4:]}'
 
-def hash_files(from_queue: queue.Queue[File | object],
-               to_queue: queue.Queue[File]):
-
-    global last_hash
-
-    worker_name = threading.current_thread().name
-
-    try:
-        while True:
-            try:
-                file = from_queue.get(timeout=1)
-            except queue.Empty:
-                continue
-
-            if file is SENTINEL:
-                from_queue.task_done()
-                return
-            assert isinstance(file, File)
-
-            file.hash_worker = worker_name
-
-            last_hash += 1
-            file.hash = f'hash_{('000' + str(last_hash))[-4:]}'
-            # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)
-
-            # except Exception as exc:  # queue.Empty ?
-            #     file.hash_error = f"{type(exc).__name__}: {exc}"
-
-            from_queue.task_done()
-            to_queue.put(file)
-
-    finally:
-        while from_queue.unfinished_tasks:
-            from_queue.task_done()
-
-
-def process_hashed_file(file: File, dirs_by_path: dict[str, Dir]):
-
-    # file.hash is set
-
-    if file.hash_error:
-        return
-
-    dir = file.parent
-    # dir_path = dir.path
-    # dir = dirs_by_path[dir_path]
-
-    dir.file_hashes.append(file.hash)
-
-    # update all dirs up: files_found := True
-    pass
-
-    # check if the parent dir is complete
-    if len(dir.file_hashes) == len(dir.files):
-        # calc fileS hash for the dir
-        pass
-
-        # check if all the subdirs (with files_found=True) een hash hebben;
-        # zo ja, dan kun je de nested hash voor de dir berekenen en naar
-        # boven doorgeven.
-        pass
-
-
-def process_hashed_files(hashed_files: queue.Queue[File], dirs_by_path: dict[str, Dir]):
-    # global
-    num_files_processed = 0
-    try:
-        while True:
-            file = hashed_files.get()
-            process_hashed_file(file, dirs_by_path)
-            num_files_processed += 1
-    except queue.Empty:
-        print('Queue of hashed files is empty.')
-    finally:
-        print(f'Processed {num_files_processed} hashed files')
-
 
 def handle_dir(path: str, subdirs: list[str], files: list[str],
-               dirs_by_path: dict[str, Dir], fth_queue: queue.Queue[File|object]):
+               dirs_by_path: dict[pathlib.Path, Dir], fth_queue: queue.Queue[File|object]) -> int:
+    """Processes a directory found by os.walk."""
 
-    print(f'Handling dir {path}')
+    print(f'Handling dir {path}', flush=True)
 
-    dir = Dir(
+    num_files_pushed = 0
+
+    _dir = Dir(
         id=generate_id(),
         run_id=RUN_ID,
-        path=path,
+        path=pathlib.Path(path),
         num_files=len(files),
         num_dirs=len(subdirs),
-        # files_found=bool(files),
-        dir_ids = [],
         file_ids= [],
+        dir_ids = [],
+
+        # files_found=bool(files),
         # dir_hashes = [],
         # file_hashes = [],
     )
 
-    dirs_by_path[path] = dir
+    dirs_by_path[_dir.path] = _dir
 
     # dir['subdirs'] = sorted(subdirs)
 
-
     for name in subdirs:
-        path = str(pathlib.Path(path, name))
-        subdir = dirs_by_path[path]
-        subdir.parent = dir
-        dir.dir_ids.append(subdir.id)
+        # link the corresponding dir obj (which should be registered by now)
+        # to the current dir (its parent)
+        subdir = dirs_by_path[pathlib.Path(path, name)]
+        subdir.parent = _dir
 
-
-    # file_hashes = []
-    # for file in dir['files']:
-    #     file_path = os.path.join(path, file)
-    #     with open(file_path, 'rb') as f:
-    #         file_hash = hashlib.md5(f.read()).hexdigest()
-    #         file_hashes.append(file_hash)  # same order a file names
-    #         # now store the file hash and file record
+        _dir.dir_ids.append(subdir.id)  # do i need these?
 
     for name in files:
         file = File(
             id=generate_id(),
             name=name,
-            parent=dir,
+            parent=_dir,
+            path=pathlib.Path(path, name),
             run_id=RUN_ID,
         )
-        dir.file_ids.append(file.id)
+        _dir.file_ids.append(file.id)
 
         # push the file obj for hashing
-        try:
-            fth_queue.put(file)
-        except queue.Full:
-            print(f'Queue of files to hash is full.')
-        except Exception as e:
-            pass
-            return
+        while True:
+            try:
+                fth_queue.put(file)
+                num_files_pushed += 1
+                break
+            except queue.Full:
+                print(f'Queue of files to hash is full; will retry', flush=True)
+                time.sleep(1)
+                continue
+            except Exception as e:
+                print(f'Error pushing file {file.id}:{name}: {e}', flush=True)
+                raise e
 
-    # # calculate hash of concatenated file hashes
-    # files_hash_input = ''.join(sorted(file_hashes))
-    # files_hash = hashlib.md5(files_hash_input.encode()).hexdigest()
+    return num_files_pushed
 
-    # # concat the subdir hashes
-    # subdirs_hash_input = ''.join(sorted(subdir_hashes))
-    # subdirs_hash = hashlib.md5(subdirs_hash_input.encode()).hexdigest()
-
-    # dir['hash'] = files_hash + '::' + subdirs_hash
-    # return dir
-
-def create_dir_info(path: str, dirs: list[str]):
-    pass
-    return None
 
 def main() -> None:
 
-    num_hash_workers = 1
-    max_hash_queue_size = 10
-
-    dirs_by_path: dict[str, Dir] = dict()
+    num_dirs_processed = 0
+    num_files_pushed_for_hashing = 0
 
 
-    # create files-to-hash queue
+    # dir objects will be registered by path
+    # in order to (later) link them to their parent dir obj
+    dirs_by_path: dict[pathlib.Path, Dir] = dict()
+
+    # create queue for files to be hash
     fth_queue: queue.Queue[File|object] = queue.Queue(maxsize=max_hash_queue_size)
 
-    # create files-hashed-queue
+    # create queue for hashed files
     fh_queue: queue.Queue[File] = queue.Queue()
 
     # create hash workers
@@ -203,7 +121,7 @@ def main() -> None:
         threading.Thread(
             target=hash_files,
             name=f"hash-worker-{i+1}",
-            args=(fth_queue, fh_queue),
+            args=(fth_queue, fh_queue, SENTINEL),
             daemon=False,
         )
         for i in range(num_hash_workers)
@@ -214,13 +132,11 @@ def main() -> None:
 
     # started = time.perf_counter()
 
-
     # create process-hashed-files worker
     pass
 
-
     # create storage queue
-    storage_queue: queue.Queue[Dir] = queue.Queue()
+    # storage_queue: queue.Queue[Dir] = queue.Queue()
 
     # create storage worker
     pass
@@ -229,54 +145,25 @@ def main() -> None:
     # walk the flattened dir tree where each dir can access values
     # (hashes) of its subdirs
     try:
-
         for fs_item in os.walk(start_dir, topdown=False):
             root, dirs, files = fs_item
-            handle_dir(root, dirs, files, dirs_by_path, fth_queue)
-
-            # generate dir ID (if not already)
-            # include the run ID
-
-            # dir ID entry:
-            # - key is dirid:
-            # - record: run ID, dir name, file contents hash,
-            #           dir path, contained file ID's,
-            #           contained dir ID's
-
-            # involve the dir name
-            # involve the number of contained files?
-            # involve ordered list of contained file names?
-            # involve ordered list of contained dir names?
-            # include into record the contained file ID's
-            # include into record the contained dir ID's
-
-            # create files contents hash:
-            # - collect the file hashes
-            # - concat these hashes in alphan order
-            # - hash the resulting string
-
-            # create files names hash:
-            # - collect the file names
-            # - concat these names in alphan order
-            # - hash the resulting string
-
-            # to be stored as: dir:<file contents hash>:<file names has>:<dir ID>
-
-            # to create the dir hash, I need;
-            #   - list of hashes of files it contains
-            #   - list of hashes of dirs it contains
-            # concat the hashes in normalized order (e.g. lexicogr)
+            num_files_pushed_for_hashing += handle_dir(root, dirs, files, dirs_by_path, fth_queue)
+            num_dirs_processed += 1
 
     finally:
-        # stop the workers
-        for worker in hash_workers:
+        # make the workers finish their work
+        for _ in hash_workers:
             fth_queue.put(SENTINEL)
+        print('Sentinel(s) sent to queue of files to hash', flush=True)
 
+        # wait for the queue to be empty
         fth_queue.join()
+        print('Queue of files to hash is empty', flush=True)
 
         # wait for the workers to finish
-        # for worker in hash_workers:
-        #     worker.join()
+        for worker in hash_workers:
+            worker.join()
+        print('All hash workers finished', flush=True)
 
         pass
 
