@@ -9,9 +9,11 @@ import uuid
 from queue import ShutDown
 from typing import Optional
 from random import random
+import logging
 
 from meta import File
 
+logger = logging.getLogger(__name__)
 
 last_hash: int = 0  # not thread safe! the get and set are not atomic ops
 
@@ -40,7 +42,7 @@ def hash_file(path: pathlib.Path) -> str:
 
 
 def hash_files(from_queue: queue.Queue[File | object],
-               to_queue: queue.Queue[File],
+               to_queue: queue.Queue[File | object],
                sentinel: object):
 
     worker_name = threading.current_thread().name
@@ -53,14 +55,14 @@ def hash_files(from_queue: queue.Queue[File | object],
                 continue
 
             if file is sentinel:
-                print(f'{worker_name} received sentinel', flush=True)
+                logger.debug('Received sentinel')
                 from_queue.task_done()
                 return
             assert isinstance(file, File)
 
             file.hash_worker = worker_name
             file_path = file.parent.path / file.name
-            print(f'{worker_name} about to hash file {file.id}: {file_path}', flush=True)
+            logger.debug('About to hash file %s: %s' % (file.id, file_path))
             file.hash = hash_file(file_path)
 
             # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)
@@ -72,11 +74,8 @@ def hash_files(from_queue: queue.Queue[File | object],
             to_queue.put(file)
 
     except ShutDown:
-        print(f'{worker_name} being shut down', flush=True)
-        to_queue.put(
-            sentinel,
-            block=False,
-        )
+        logger.warning('Being shut down')
+        to_queue.put(sentinel, block=False)
 
         # while from_queue.unfinished_tasks:
         #     print(f'Removing unfinished task from queue ({worker_name})')
@@ -85,4 +84,4 @@ def hash_files(from_queue: queue.Queue[File | object],
         return
 
     finally:
-        print(f'{worker_name} finished', flush=True)
+        logger.debug('Finished')

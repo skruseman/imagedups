@@ -6,6 +6,9 @@ import threading
 import time
 import uuid
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 from meta import Dir, File, Run
 
@@ -61,6 +64,6 @@ def process_hashed_files(hashed_files: queue.Queue[File], dirs_by_path: dict[str
             process_hashed_file(file, dirs_by_path)
             num_files_processed += 1
     except queue.Empty:
-        print('Queue of hashed files is empty.')
+        logger.warning('Queue of hashed files is empty')
     finally:
-        print(f'Processed {num_files_processed} hashed files')
+        logger.info('Processed %s hashed files', num_files_processed)

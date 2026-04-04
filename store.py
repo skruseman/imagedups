@@ -7,12 +7,15 @@ from typing import Iterable, Iterator, Optional
 import lmdb
 
 import record_pb2
+import logging
 
 from meta import Run, Dir, File
 
 
 SCHEMA_VERSION = 1
 
+
+logger = logging.getLogger(__name__)
 
 def make_user_key(user_id: str) -> bytes:
     """

@@ -3,15 +3,19 @@ import os
 import pathlib
 import queue
 import logging
+import logging.config
 import threading
 import time
 import uuid
 from typing import Optional
 
-from meta import Dir, File, Run
+import logging
 
+from meta import Dir, File, Run
 from filehashing import hash_files
 from dirhashing import process_hashed_files  # hash_dirs?
+
+logger = logging.getLogger(__name__)
 
 RUN_ID = '42'
 SENTINEL = object()
@@ -23,7 +27,7 @@ max_hash_queue_size = 12
 last_id: int = 0
 
 start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
-# start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
+start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
 
 
 # generate run ID as yyyyMMdd:hhmmssuuu of start (wall) time
@@ -51,14 +55,14 @@ def monitor_hash_queue(fth_queue: queue.Queue[File|object]):
         num_samples += 1
         time.sleep(0.42)
 
-    print(f'Max hash queue size {max_hash_queue_size} ({num_samples} samples)', flush=True)
+    logger.info('Max hash queue size %s (%s samples)' % (max_hash_queue_size, num_samples))
 
 
 def handle_dir(path: str, subdirs: list[str], files: list[str],
                dirs_by_path: dict[pathlib.Path, Dir], fth_queue: queue.Queue[File|object]) -> int:
     """Processes a directory found by os.walk."""
 
-    print(f'Handling dir {path}', flush=True)
+    logger.debug('Handling dir %s' % path)
 
     num_files_pushed = 0
 
@@ -105,11 +109,11 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
                 num_files_pushed += 1
                 break
             except queue.Full:
-                print(f'Queue of files to hash is full; will retry', flush=True)
+                print(f'Queue of files to hash is full; will retry')
                 time.sleep(1)
                 continue
             except Exception as e:
-                print(f'Error pushing file {file.id}:{name}: {e}', flush=True)
+                print(f'Error pushing file {file.id}:{name}: {e}')
                 raise e
 
     return num_files_pushed
@@ -125,25 +129,24 @@ def store(file_queue: queue.Queue[File|object], sentinel: object):
             continue
 
         if file is sentinel:
-            print(f'store worker received sentinel', flush=True)
+            logger.info('Received sentinel')
             file_queue.task_done()
             break
 
         assert isinstance(file, File)
 
         # for now no actual storage
-        print(f'File {file.id} has hash {file.hash[:8]}', flush=True)
+        logger.debug('File %s has hash %s' % (file.id, file.hash[:8]))
         file_queue.task_done()
         num_files_processed += 1
 
-    print(f'Processed {num_files_processed} files', flush=True)
+    logger.info('Processed %s files' % num_files_processed)
 
 
 def main() -> None:
 
     num_dirs_processed = 0
     num_files_pushed_for_hashing = 0
-
 
     # dir objects will be registered by path
     # in order to (later) link them to their parent dir obj
@@ -207,73 +210,41 @@ def main() -> None:
         # make the workers finish
         for _ in hash_workers:
             fth_queue.put(SENTINEL)
-        print('Sentinel(s) sent to queue of files to hash', flush=True)
+
+        logger.debug('Sentinel(s) sent to queue of files to hash')
 
         # wait for the hash queue to be empty
         fth_queue.join()
-        print('Queue of files to hash is empty', flush=True)
+        logger.debug('Queue of files to hash is empty')
 
         # wait for the hash workers to finish
         for worker in hash_workers:
             worker.join()
-        print('All hash workers finished', flush=True)
+        logger.info('All hash workers finished')
 
         # make the store worker finish
         fh_queue.put(SENTINEL)
-        print('Sentinel pushed to queue of hashed files', flush=True)
+        logger.info('Sentinel pushed to queue of hashed files')
 
         # wait for the store queue to be empty
         fh_queue.join()
-        print('Queue of hashed files is empty', flush=True)
+        logger.info('Queue of hashed files is empty')
 
         # wait for the store worker to finish
         store_worker.join()
-        print('Store worker finished', flush=True)
+        logger.info('Store worker finished')
 
         # make the monitor thread finish
         STOP_EVENT.set()
 
-    print(f'{num_dirs_processed} dirs processed', flush=True)
-    print(f'{num_files_pushed_for_hashing} files pushed', flush=True)
+    logger.info('%s dirs processed', num_dirs_processed)
+    logger.info('%s files hashed', num_files_pushed_for_hashing)
 
-
-def nep():
-    logger.info('Running NEP')
 
 if __name__ == "__main__":
 
-    # logging.basicConfig(
-    #     filename='imdup.log',
-    #     filemode='w',
-    #     level=logging.DEBUG,
-    #     format='%(asctime)s,%(msecs)d %(levelname)s [%(name)s:%(threadName)s] %(message)s (%(funcName)s)',
-    #     datefmt='%H:%M:%S',
-    # )
-
-    import logging.config
     logging.config.fileConfig(fname='logging.conf', disable_existing_loggers=False)
 
-
-    logging.info('I told you so')
-    logging.warning('Look out!')
-
-    logger = logging.getLogger(__name__)
-
-    logger.info('this is info')
-    logger.debug('this is debug')
-
-    nep()
-
-    import sublog
-    sublog.nepsub()
-
-    logger.debug('this is also debug')
-    logger.info('this is also info')
-
-
-    # logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
-
-
-    # main()
+    main()
 
     print('Fin!')
