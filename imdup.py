@@ -2,6 +2,7 @@ import hashlib
 import os
 import pathlib
 import queue
+import logging
 import threading
 import time
 import uuid
@@ -235,5 +236,44 @@ def main() -> None:
     print(f'{num_dirs_processed} dirs processed', flush=True)
     print(f'{num_files_pushed_for_hashing} files pushed', flush=True)
 
+
+def nep():
+    logger.info('Running NEP')
+
 if __name__ == "__main__":
-    main()
+
+    # logging.basicConfig(
+    #     filename='imdup.log',
+    #     filemode='w',
+    #     level=logging.DEBUG,
+    #     format='%(asctime)s,%(msecs)d %(levelname)s [%(name)s:%(threadName)s] %(message)s (%(funcName)s)',
+    #     datefmt='%H:%M:%S',
+    # )
+
+    import logging.config
+    logging.config.fileConfig(fname='logging.conf', disable_existing_loggers=False)
+
+
+    logging.info('I told you so')
+    logging.warning('Look out!')
+
+    logger = logging.getLogger(__name__)
+
+    logger.info('this is info')
+    logger.debug('this is debug')
+
+    nep()
+
+    import sublog
+    sublog.nepsub()
+
+    logger.debug('this is also debug')
+    logger.info('this is also info')
+
+
+    # logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
+
+
+    # main()
+
+    print('Fin!')
