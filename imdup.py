@@ -14,6 +14,7 @@ import logging
 from meta import Dir, File, Run
 from filehashing import hash_files
 from monitor import monitor_hash_queue
+from storage import store
 from dirhashing import process_hashed_files  # hash_dirs?
 
 RUN_ID = '42'
@@ -29,7 +30,7 @@ max_hash_queue_size = 12
 last_id: int = 0
 
 start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
-start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
+# start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
 
 
 # generate run ID as yyyyMMdd:hhmmssuuu of start (wall) time
@@ -106,30 +107,6 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
                 raise e
 
     return num_files_pushed
-
-
-def store(file_queue: queue.Queue[File|object], sentinel: object):
-    num_files_processed: int = 0
-
-    while True:
-        try:
-            file = file_queue.get(timeout=1)
-        except queue.Empty:
-            continue
-
-        if file is sentinel:
-            logger.info('Received sentinel')
-            file_queue.task_done()
-            break
-
-        assert isinstance(file, File)
-
-        # for now no actual storage
-        logger.debug('File %s has hash %s' % (file.id, file.hash[:8]))
-        file_queue.task_done()
-        num_files_processed += 1
-
-    logger.info('Processed %s files' % num_files_processed)
 
 
 def main() -> None:

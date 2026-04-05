@@ -1,3 +1,5 @@
+# sample multi-threaded producer-consumer Chat
+
 from __future__ import annotations
 
 import time
