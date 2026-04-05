@@ -13,13 +13,15 @@ import logging
 
 from meta import Dir, File, Run
 from filehashing import hash_files
+from monitor import monitor_hash_queue
 from dirhashing import process_hashed_files  # hash_dirs?
-
-logger = logging.getLogger(__name__)
 
 RUN_ID = '42'
 SENTINEL = object()
-STOP_EVENT = threading.Event()
+
+
+logger = logging.getLogger(__name__)
+stop_event = threading.Event()
 
 num_hash_workers = 4
 max_hash_queue_size = 12
@@ -43,19 +45,6 @@ def generate_id() -> str:
     last_id += 1
     # return str(uuid.uuid4())
     return f'id_{('000' + str(last_id))[-4:]}'
-
-
-def monitor_hash_queue(fth_queue: queue.Queue[File|object]):
-    max_hash_queue_size: int = 0
-    num_samples: int = 0
-
-    while not STOP_EVENT.is_set():
-        sz: int = fth_queue.qsize()
-        max_hash_queue_size = max(max_hash_queue_size, sz)
-        num_samples += 1
-        time.sleep(0.42)
-
-    logger.info('Max hash queue size %s (%s samples)' % (max_hash_queue_size, num_samples))
 
 
 def handle_dir(path: str, subdirs: list[str], files: list[str],
@@ -193,7 +182,7 @@ def main() -> None:
     monitor = threading.Thread(
         target=monitor_hash_queue,
         name='monitor',
-        args=(fth_queue, ),
+        args=(fth_queue, stop_event),
         daemon=False,
     )
     monitor.start()
@@ -235,7 +224,7 @@ def main() -> None:
         logger.info('Store worker finished')
 
         # make the monitor thread finish
-        STOP_EVENT.set()
+        stop_event.set()
 
     logger.info('%s dirs processed', num_dirs_processed)
     logger.info('%s files hashed', num_files_pushed_for_hashing)
