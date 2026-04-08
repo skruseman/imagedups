@@ -13,7 +13,7 @@ import logging
 
 from meta import Dir, File, Run
 from filehashing import hash_files
-from monitor import monitor_hash_queue
+from monitor import monitor_queues
 from storage import store
 from dirhashing import process_hashed_files  # hash_dirs?
 
@@ -157,9 +157,9 @@ def main() -> None:
 
     # start monitor thread
     monitor = threading.Thread(
-        target=monitor_hash_queue,
+        target=monitor_queues,
         name='monitor',
-        args=(fth_queue, stop_event),
+        args=(fth_queue, fh_queue, stop_event),
         daemon=False,
     )
     monitor.start()
