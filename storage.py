@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import queue
+# from enum import nonmember
 
 import xxhash
 
 from meta import File, Dir
 
 
-# DUMMY_HASH = None  # for empty dirs?
+# EMPTY_HASH = ''  # for empty dirs?
 
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,22 @@ def calc_files_hash(file_hashes: list[str]) -> str:
     return hasher.hexdigest()
 
 
+def calc_dirs_hash(dir_hashes: list[str]) -> str:
+    """Calculate a single hash value from individual dir hashes.
+
+    For dir hashes we use xxhash: 64 bits = 8 bytes (hex strings 16 long)
+
+    If the list of hashes is empty, return empty string.
+    If there's only a single dir hash, return it.
+    Otherwise, sort the hashes, concatenate, then hash and return the hex digest.
+
+    A dir hash can be the empty string, indicating it contains no files and no
+    (sub-)directories containing files.
+    """
+
+    return ''
+
+
 def calc_all_hash(files_hash: str, dirs_hash: str) -> str:
     """Calculates a directory node's "all" hash.
 
@@ -78,22 +95,6 @@ def calc_all_hash(files_hash: str, dirs_hash: str) -> str:
     """
 
     return ""
-
-
-def calc_dirs_hash(dir_hashes: list[str]) -> str:
-    """Calculate a single hash value from individual dir hashes.
-
-    For dir hashes we use xxhash: 64 bits = 8 bytes (hex strings 16 long)
-
-    If the list of hashes is empty, return empty string.
-    If there's only a single dir hash, return it.
-    Otherwise, sort the hashes, concatenate, then hash and return the hex digest.
-
-    A dir hash can be the empty string, indicating it contains no files and no
-    (sub-)directories containing files.
-    """
-
-    return ''
 
 
 def update_dir(dir_: Dir):
