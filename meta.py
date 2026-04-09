@@ -43,8 +43,8 @@ class Dir:
     # files_found: bool = False  #
     dir_hashes: list[str] = dataclasses.field(default_factory=list)
     file_hashes: list[str] = dataclasses.field(default_factory=list)
-    files_hash: Optional[str] = None  # 8 bytes for xxhash.xxh3_64
-    dirs_hash: Optional[str] = None  # 8 bytes for xxhash.xxh3_64
+    files_hash: str = ''  # 16 hexits for xxhash.xxh3_64
+    dirs_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
     # timestamp: float
 
