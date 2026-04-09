@@ -52,20 +52,9 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
                dirs_by_path: dict[pathlib.Path, Dir], fth_queue: queue.Queue[File|object]) -> int:
     """Processes a directory found by os.walk."""
 
-    logger.debug('Handling dir %s' % path)
+    # logger.debug('Handling dir %s' % path)
 
     num_files_pushed = 0
-
-    parent = dirs_by_path.get(pathlib.Path(path).parent, None)
-    if pathlib.Path(path).parent in dirs_by_path:
-
-        # was added as a subdir
-        parent = dirs_by_path[pathlib.Path(path).parent]
-
-    else:
-        parent = None
-
-        # is root dir
 
     dir_ = Dir(
         id = 'dir_' + generate_id(),
@@ -75,7 +64,7 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
         num_dirs = len(subdirs),
         file_ids= [],
         dir_ids = [],
-        parent = parent,
+        parent = dirs_by_path.get(pathlib.Path(path).parent, None),
 
         # files_found=bool(files),
         # dir_hashes = [],
@@ -106,6 +95,7 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
             # path = pathlib.Path(path, name),
             run_id = RUN_ID,
         )
+        logger.debug('Generated %s : %s', file.id, dir_.path / name)
         dir_.file_ids.append(file.id)
 
         # push the file obj for hashing
@@ -218,6 +208,8 @@ def main() -> None:
 
         # make the monitor thread finish
         stop_event.set()
+        monitor.join()
+        logger.info('Monitor thread finished')
 
     logger.info('%s dirs processed', num_dirs_processed)
     logger.info('%s files hashed', num_files_pushed_for_hashing)
