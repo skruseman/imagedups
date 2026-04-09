@@ -45,6 +45,8 @@ class Dir:
     file_hashes: list[str] = dataclasses.field(default_factory=list)
     files_hash: str = ''  # 16 hexits for xxhash.xxh3_64
     dirs_hash: str = ''  # 16 hexits for xxhash.xxh3_64
+    # the overall "all" hash to be passed to the parent dir
+    all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
     # timestamp: float
 

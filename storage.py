@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import queue
+from typing import Optional
+
 # from enum import nonmember
 
 import xxhash
@@ -56,8 +58,8 @@ def calc_files_hash(file_hashes: list[str]) -> str:
 
     hasher = xxhash.xxh3_64()
     # normalize by sorting the hashes
-    for file_hash in sorted(file_hashes):
-        hasher.update(bytes.fromhex(file_hash))
+    for hash_ in sorted(file_hashes):
+        hasher.update(bytes.fromhex(hash_))
     return hasher.hexdigest()
 
 
@@ -74,7 +76,18 @@ def calc_dirs_hash(dir_hashes: list[str]) -> str:
     (sub-)directories containing files.
     """
 
-    return ''
+    if not dir_hashes:
+        return ''
+
+    assert len(dir_hashes[0]) == 16  # 16 hexits representing 8 byte xxhash
+    if len(dir_hashes) == 1:
+        return dir_hashes[0]
+
+    hasher = xxhash.xxh3_64()
+    # normalize by sorting the hashes
+    for hash_ in sorted(dir_hashes):
+        hasher.update(bytes.fromhex(hash_))
+    return hasher.hexdigest()
 
 
 def calc_all_hash(files_hash: str, dirs_hash: str) -> str:
@@ -94,15 +107,45 @@ def calc_all_hash(files_hash: str, dirs_hash: str) -> str:
     If both hashes are empty then simply return the empty string.
     """
 
-    return ""
+    if not (files_hash or dirs_hash):  # both empty
+        return ''
+    if not (files_hash and dirs_hash):  # exactly one is empty
+        assert len(files_hash) + len(dirs_hash) == 16
+        return files_hash + dirs_hash  # i.e. the one that is not empty
+
+    assert len(files_hash) == 16
+    assert len(dirs_hash) == 16
+
+    hasher = xxhash.xxh3_64()
+    for hash_ in (files_hash, dirs_hash):
+        hasher.update(bytes.fromhex(hash_))
+    return hasher.hexdigest()
 
 
 def update_dir(dir_: Dir):
+    """Updates the specified dir node if possible, calculating and setting cumulative hash values.
+
+    Assumes it will not be passed a node representing an empty dir.
+    """
+
+    assert dir_.num_files * dir_.num_dirs > 0  # not an empty dir
+
     if len(dir_.file_hashes) == dir_.num_files:
-        dir_.files_hash = calc_files_hash(dir_.file_hashes)
-        if len(dir_.dir_hashes) == dir_.num_dirs:
-            all_hash = calc_dirs_hash(dir_.dir_hashes)
-            update_dir(dir_.parent, all_hash)
+        if dir_.num_files > 0 and not dir_.files_hash:
+            dir_.files_hash = calc_files_hash(dir_.file_hashes)
+
+    if len(dir_.dir_hashes) == dir_.num_dirs:
+        if ''.join(dir_.dir_hashes) != '':  # not all empty dirs
+            if not dir_.dirs_hash:
+                dir_.dirs_hash = calc_dirs_hash(dir_.dir_hashes)
+
+    if dir_.parent:  # False for root dir
+        if dir_.files_hash and dir_.dirs_hash:
+            all_hash = calc_all_hash(dir_.files_hash, dir_.dirs_hash)
+            if not all_hash:
+                logger.debug('Empty overall "all" hash for dir %s', dir_.path)
+            dir_.parent.dir_hashes.append(all_hash)
+            update_dir(dir_.parent)
 
 
 def add_file_hash_to_dir(dir_: Dir, file_hash: str):
