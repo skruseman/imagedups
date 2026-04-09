@@ -13,6 +13,10 @@ import logging
 
 from meta import File
 
+
+TIMEOUT_SECS = 0.25
+TIMEOUT_SECS = 5
+
 logger = logging.getLogger(__name__)
 
 last_hash: int = 0  # not thread safe! the get and set are not atomic ops
@@ -36,7 +40,7 @@ def hash_file(path: pathlib.Path) -> str:
     hash = hashlib.sha256(to_hash).hexdigest()
 
     # variable sleep time
-    time.sleep(0.25 + random() * 1)
+    time.sleep(TIMEOUT_SECS + random() * 1)
 
     return hash
 

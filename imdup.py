@@ -56,41 +56,57 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
 
     num_files_pushed = 0
 
-    _dir = Dir(
-        id=generate_id(),
-        run_id=RUN_ID,
-        path=pathlib.Path(path),
-        num_files=len(files),
-        num_dirs=len(subdirs),
+    parent = dirs_by_path.get(pathlib.Path(path).parent, None)
+    if pathlib.Path(path).parent in dirs_by_path:
+
+        # was added as a subdir
+        parent = dirs_by_path[pathlib.Path(path).parent]
+
+    else:
+        parent = None
+
+        # is root dir
+
+    dir_ = Dir(
+        id = 'dir_' + generate_id(),
+        run_id = RUN_ID,
+        path = pathlib.Path(path),
+        num_files = len(files),
+        num_dirs = len(subdirs),
         file_ids= [],
         dir_ids = [],
+        parent = parent,
 
         # files_found=bool(files),
         # dir_hashes = [],
         # file_hashes = [],
     )
+    logger.debug('Generated %s : %s', dir_.id, dir_.path)
 
-    dirs_by_path[_dir.path] = _dir
+    if dir_.num_dirs > 0:
+        dirs_by_path[dir_.path] = dir_
 
     # dir['subdirs'] = sorted(subdirs)
 
-    for name in subdirs:
+    # for name in subdirs:
         # link the corresponding dir obj (which should be registered by now)
         # to the current dir (its parent)
-        subdir = dirs_by_path[pathlib.Path(path, name)]
-        subdir.parent = _dir
+        # subdir = dirs_by_path[pathlib.Path(path, name)]
+        # subdir.parent = _dir
 
-        _dir.dir_ids.append(subdir.id)  # do i need these?
+        # dirs_by_path[pathlib.Path(path)] = _dir
+
+        # _dir.dir_ids.append(subdir.id)  # do i need these?
 
     for name in files:
         file = File(
-            id=generate_id(),
-            name=name,
-            parent=_dir,
-            # path=pathlib.Path(path, name),
-            run_id=RUN_ID,
+            id = 'file_' + generate_id(),
+            name = name,
+            parent = dir_,
+            # path = pathlib.Path(path, name),
+            run_id = RUN_ID,
         )
-        _dir.file_ids.append(file.id)
+        dir_.file_ids.append(file.id)
 
         # push the file obj for hashing
         while True:
@@ -167,7 +183,7 @@ def main() -> None:
     # walk the flattened dir tree where each dir can access values
     # (hashes) of its subdirs
     try:
-        for fs_item in os.walk(start_dir, topdown=False):
+        for fs_item in os.walk(start_dir, topdown=True):
             root, dirs, files = fs_item
             num_files_pushed_for_hashing += handle_dir(root, dirs, files, dirs_by_path, fth_queue)
             num_dirs_processed += 1

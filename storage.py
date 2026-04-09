@@ -13,6 +13,8 @@ from meta import File, Dir
 
 # EMPTY_HASH = ''  # for empty dirs?
 
+TIMEOUT_SECS = 0.5
+TIMEOUT_SECS = 25
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +35,17 @@ def store_file_hash(file: File):
 def store_file(file: File):
     pass
 
-    # create file records for its hash and for the file itself
+    # create records for the file's hash and for the file itself
 
     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
+
+
+def store_dir(dir_: Dir):
+    pass
+
+    # create records for the dir's hash and for the dir itself
+
+    logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
 
 
 def calc_files_hash(file_hashes: list[str]) -> str:
@@ -128,19 +138,18 @@ def update_dir(dir_: Dir):
     Assumes it will not be passed a node representing an empty dir.
     """
 
-    assert dir_.num_files * dir_.num_dirs > 0  # not an empty dir
-
-    if len(dir_.file_hashes) == dir_.num_files:
-        if dir_.num_files > 0 and not dir_.files_hash:
-            dir_.files_hash = calc_files_hash(dir_.file_hashes)
+    # assert dir_.num_dirs > 0
+    assert dir_.num_files == 0 or dir_.files_hash
 
     if len(dir_.dir_hashes) == dir_.num_dirs:
         if ''.join(dir_.dir_hashes) != '':  # not all empty dirs
             if not dir_.dirs_hash:
                 dir_.dirs_hash = calc_dirs_hash(dir_.dir_hashes)
 
-    if dir_.parent:  # False for root dir
-        if dir_.files_hash and dir_.dirs_hash:
+        store_dir(dir_)
+
+        if dir_.parent:  # False for root dir
+            # if dir_.files_hash and dir_.dirs_hash:
             all_hash = calc_all_hash(dir_.files_hash, dir_.dirs_hash)
             if not all_hash:
                 logger.debug('Empty overall "all" hash for dir %s', dir_.path)
@@ -148,10 +157,24 @@ def update_dir(dir_: Dir):
             update_dir(dir_.parent)
 
 
+def update_dir_with_file_hash(dir_: Dir):
+    """Updates the specified dir node if possible, calculating and setting cumulative hash values.
+
+    Assumes it will not be passed a node representing an empty dir.
+    """
+
+    # assert dir_.num_files > 0
+
+    if len(dir_.file_hashes) == dir_.num_files:
+        assert not dir_.files_hash
+        dir_.files_hash = calc_files_hash(dir_.file_hashes)
+        update_dir(dir_)
+
+
 def add_file_hash_to_dir(dir_: Dir, file_hash: str):
     assert len(dir_.file_hashes) < dir_.num_files
     dir_.file_hashes.append(file_hash)
-    update_dir(dir_)
+    update_dir_with_file_hash(dir_)
 
 
 def handle_file(file: File):
@@ -166,7 +189,7 @@ def store(file_queue: queue.Queue[File|object],
 
     while True:
         try:
-            file = file_queue.get(timeout=0.5)
+            file = file_queue.get(timeout=TIMEOUT_SECS)
         except queue.Empty:
             logger.debug('Queue empty; will retry get')
             continue

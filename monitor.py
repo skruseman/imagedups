@@ -10,6 +10,8 @@ from meta import File
 
 logger = logging.getLogger(__name__)
 
+SLEEP_SECS = 0.25
+
 
 def monitor_queues(fth_queue: queue.Queue[File | object],
                    fh_queue: queue.Queue[File | object],
@@ -24,7 +26,7 @@ def monitor_queues(fth_queue: queue.Queue[File | object],
         sz = fh_queue.qsize()
         max_hashed_files_queue_size = max(max_hashed_files_queue_size, sz)
         num_samples += 1
-        time.sleep(0.25)
+        time.sleep(SLEEP_SECS)
 
     logger.info('Max hash queue size %s (%s samples)' % (max_hash_queue_size, num_samples))
     logger.info('Max hashed files queue size %s (%s samples)' % (max_hashed_files_queue_size, num_samples))
