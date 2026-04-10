@@ -35,12 +35,12 @@ def hash_file(path: pathlib.Path) -> str:
     # return f'hash_{('000' + str(last_hash))[-4:]}'
 
     # another fake impl but with proper hash format output
-    to_hash = bytes(str(path).encode('utf-8'))
+    to_hash = str(path).encode('utf-8')
     # hash = xxhash.xxh64(to_hash).hexdigest()
     hash = hashlib.sha256(to_hash).hexdigest()
 
     # variable sleep time
-    time.sleep(TIMEOUT_SECS + random() * 1)
+    time.sleep(TIMEOUT_SECS + random() * 0.5)
 
     return hash
 
@@ -66,7 +66,7 @@ def hash_files(from_queue: queue.Queue[File | object],
 
             file.hash_worker = worker_name
             file_path = file.parent.path / file.name
-            logger.debug('About to hash file %s: %s' % (file.id, file_path))
+            logger.debug('About to hash file %s', file.id)
             file.hash = hash_file(file_path)
 
             # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)

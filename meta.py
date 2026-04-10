@@ -32,6 +32,7 @@ class Dir:
     id: str  # 36 , str(uuid.uuid4()) ; prepend with run id?
     run_id: str  # 36
     path: pathlib.Path
+    path_repr: str
 
     num_files: int
     num_dirs: int
@@ -49,6 +50,7 @@ class Dir:
     all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
     # timestamp: float
+
 
 @dataclass(frozen=False)
 class File:

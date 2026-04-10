@@ -27,11 +27,11 @@ stop_event = threading.Event()
 num_hash_workers = 4
 max_hash_queue_size = 12
 
-last_id: int = 0
+last_ids: dict[str, int] = {}
 
 start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
 # start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
-
+start_dir_len = len(start_dir)
 
 # generate run ID as yyyyMMdd:hhmmssuuu of start (wall) time
 
@@ -41,12 +41,18 @@ start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
 #             errors encountered?
 #             root dir ID?
 
-def generate_id() -> str:
-    global last_id
+def generate_id(cat: str = '') -> str:
+    # global last_ids
+    last_id = last_ids.get(cat, 0)
     last_id += 1
+    last_ids[cat] = last_id
     # return str(uuid.uuid4())
-    return f'id_{('000' + str(last_id))[-4:]}'
+    num_len = 4
+    return f'{cat + '-' if cat else ''}{('0'*4 + str(last_id))[-num_len:]}'
 
+
+# def relative_path(path: pathlib.Path) -> pathlib.Path:
+#     path.
 
 def handle_dir(path: str, subdirs: list[str], files: list[str],
                dirs_by_path: dict[pathlib.Path, Dir], fth_queue: queue.Queue[File|object]) -> int:
@@ -56,21 +62,27 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
 
     num_files_pushed = 0
 
+    path_obj = pathlib.Path(path)
+    parent_dir = dirs_by_path.get(pathlib.Path(path).parent, None)
+
+    path_repr = '.' + os.path.sep + (str(path_obj.relative_to(start_dir)) + os.path.sep if parent_dir else '')
+
     dir_ = Dir(
-        id = 'dir_' + generate_id(),
+        id = generate_id('dir'),
         run_id = RUN_ID,
-        path = pathlib.Path(path),
+        path = path_obj,
         num_files = len(files),
         num_dirs = len(subdirs),
         file_ids= [],
         dir_ids = [],
-        parent = dirs_by_path.get(pathlib.Path(path).parent, None),
+        parent = parent_dir,
+        path_repr= path_repr,
 
         # files_found=bool(files),
         # dir_hashes = [],
         # file_hashes = [],
     )
-    logger.debug('Generated %s : %s', dir_.id, dir_.path)
+    logger.debug('Assigned ID %s to:  %s', dir_.id, dir_.path_repr)
 
     if dir_.num_dirs > 0:
         dirs_by_path[dir_.path] = dir_
@@ -89,13 +101,13 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
 
     for name in files:
         file = File(
-            id = 'file_' + generate_id(),
+            id = generate_id('file'),
             name = name,
             parent = dir_,
             # path = pathlib.Path(path, name),
             run_id = RUN_ID,
         )
-        logger.debug('Generated %s : %s', file.id, dir_.path / name)
+        logger.debug('Assigned ID %s to: %s', file.id, dir_.path_repr + name)
         dir_.file_ids.append(file.id)
 
         # push the file obj for hashing
