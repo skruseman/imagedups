@@ -134,7 +134,7 @@ def main() -> None:
     hash_workers = [
         threading.Thread(
             target=hash_files,
-            name=f"hash-worker-{i+1}",
+            name=f"hash-workr-{i+1}",
             args=(fth_queue, fh_queue, SENTINEL),
             daemon=False,
         )
