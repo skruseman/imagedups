@@ -9,7 +9,7 @@ from typing import Optional
 import xxhash
 
 from meta import File, Dir
-
+from utils import Counter
 
 # EMPTY_HASH = ''  # for empty dirs?
 
@@ -18,6 +18,8 @@ TIMEOUT_SECS = 25
 
 logger = logging.getLogger(__name__)
 
+num_dirs_stored: Counter
+num_files_stored: Counter
 
 def store_file_record(file: File):
     # key: file:<run id>:<id>
@@ -33,18 +35,18 @@ def store_file_hash(file: File):
 
 
 def store_file(file: File):
-    pass
-
     # create records for the file's hash and for the file itself
 
+    global num_files_stored
+    num_files_stored.incr()
     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
 
 
 def store_dir(dir_: Dir):
-    pass
-
     # create records for the dir's hash and for the dir itself
 
+    global num_dirs_stored
+    num_dirs_stored.incr()
     logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
 
 
@@ -183,7 +185,16 @@ def handle_file(file: File):
 
 
 def store(file_queue: queue.Queue[File|object],
-          sentinel: object):
+          sentinel: object,
+          files_counter: Counter,
+          dirs_counter: Counter,
+          ):
+
+    global num_files_stored
+    global num_dirs_stored
+
+    num_files_stored = files_counter
+    num_dirs_stored = dirs_counter
 
     num_files_processed: int = 0
 
@@ -204,4 +215,12 @@ def store(file_queue: queue.Queue[File|object],
         file_queue.task_done()
         num_files_processed += 1
 
-    logger.info('Processed %s files' % num_files_processed)
+    logger.info('Processed %d queued files', num_files_processed)
+
+    num_files_stored.flush()
+    num_dirs_stored.flush()
+
+    logger.info('Stored %d files and %d directories',
+                num_files_stored.get(), num_dirs_stored.get())
+
+    assert num_files_stored.get() == num_files_processed

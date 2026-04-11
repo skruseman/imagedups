@@ -8,9 +8,15 @@ import uuid
 from typing import Optional
 import logging
 
+from utils import Counter
+
 logger = logging.getLogger(__name__)
 
 from meta import Dir, File, Run
+
+
+# stored_files_counter = None
+# stored_dirs_counter = None
 
 
 def process_hashed_file(file: File, dirs_by_path: dict[str, Dir]):
@@ -40,7 +46,17 @@ def process_hashed_file(file: File, dirs_by_path: dict[str, Dir]):
         pass
 
 
-def process_hashed_files(hashed_files: queue.Queue[File], dirs_by_path: dict[str, Dir]):
+def process_hashed_files(hashed_files: queue.Queue[File],
+                         dirs_by_path: dict[str, Dir],
+                         # files_counter: Counter,
+                         # dirs_counter: Counter,
+                         ):
+
+    # global stored_files_counter
+    # global stored_dirs_counter
+    #
+    # stored_files_counter = files_counter
+    # stored_dirs_counter = dirs_counter
 
     # to create the dir hash, I need;
     #   - list of hashes of files it contains

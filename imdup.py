@@ -16,6 +16,7 @@ from filehashing import hash_files
 from monitor import monitor_queues
 from storage import store
 from dirhashing import process_hashed_files  # hash_dirs?
+from utils import Counter
 
 RUN_ID = '42'
 SENTINEL = object()
@@ -129,25 +130,28 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
 
 def main() -> None:
 
-    num_dirs_processed = 0
-    num_files_pushed_for_hashing = 0
+    num_dirs_found = 0
+    num_files_found = 0
 
     # dir objects will be registered by path
     # in order to (later) link them to their parent dir obj
     dirs_by_path: dict[pathlib.Path, Dir] = dict()
 
-    # create queue for files to be hash
+    # create queue for files to be hash, and a counter
     fth_queue: queue.Queue[File|object] = queue.Queue(maxsize=max_hash_queue_size)
+    hashed_files_counter: Counter = Counter()
 
-    # create queue for hashed files
+    # create queue for hashed files, and counters
     fh_queue: queue.Queue[File|object] = queue.Queue()
+    stored_files_counter: Counter = Counter()
+    stored_dirs_counter: Counter = Counter()
 
     # create hash workers
     hash_workers = [
         threading.Thread(
             target=hash_files,
             name=f"hash-workr-{i+1}",
-            args=(fth_queue, fh_queue, SENTINEL),
+            args=(fth_queue, fh_queue, SENTINEL, hashed_files_counter),
             daemon=False,
         )
         for i in range(num_hash_workers)
@@ -168,7 +172,7 @@ def main() -> None:
     store_worker = threading.Thread(
         target=store,
         name='store-worker',
-        args=(fh_queue, SENTINEL),
+        args=(fh_queue, SENTINEL, stored_dirs_counter, stored_files_counter),
         daemon=False,
     )
     store_worker.start()
@@ -187,8 +191,8 @@ def main() -> None:
     try:
         for fs_item in os.walk(start_dir, topdown=True):
             root, dirs, files = fs_item
-            num_files_pushed_for_hashing += handle_dir(root, dirs, files, dirs_by_path, fth_queue)
-            num_dirs_processed += 1
+            num_files_found += handle_dir(root, dirs, files, dirs_by_path, fth_queue)
+            num_dirs_found += 1
 
     finally:
         # make the workers finish
@@ -223,8 +227,11 @@ def main() -> None:
         monitor.join()
         logger.info('Monitor thread finished')
 
-    logger.info('%s dirs processed', num_dirs_processed)
-    logger.info('%s files hashed', num_files_pushed_for_hashing)
+    logger.info('%s dirs found', num_dirs_found)
+    logger.info('%s files found', num_files_found)
+
+    assert stored_dirs_counter.get() == num_dirs_found
+    assert stored_files_counter.get() == num_files_found
 
 
 if __name__ == "__main__":

@@ -11,13 +11,18 @@ from typing import Optional
 from random import random
 import logging
 
+from utils import Counter
 from meta import File
 
 
 TIMEOUT_SECS = 0.25
 TIMEOUT_SECS = 5
 
+SLEEP_SECS = 0.5  # to fake hashing time
+
 logger = logging.getLogger(__name__)
+
+# hashed_files_counter = None
 
 last_hash: int = 0  # not thread safe! the get and set are not atomic ops
 
@@ -40,28 +45,31 @@ def hash_file(path: pathlib.Path) -> str:
     hash = hashlib.sha256(to_hash).hexdigest()
 
     # variable sleep time
-    time.sleep(TIMEOUT_SECS + random() * 0.5)
+    time.sleep(SLEEP_SECS + random() * 0.5)
 
     return hash
 
 
 def hash_files(from_queue: queue.Queue[File | object],
                to_queue: queue.Queue[File | object],
-               sentinel: object):
+               sentinel: object,
+               counter: Counter,
+               ):
 
     worker_name = threading.current_thread().name
 
     try:
         while True:
             try:
-                file = from_queue.get(timeout=1)
+                file = from_queue.get(timeout=TIMEOUT_SECS)
             except queue.Empty:
+                counter.flush()
                 continue
 
             if file is sentinel:
                 logger.debug('Received sentinel')
                 from_queue.task_done()
-                return
+                break
             assert isinstance(file, File)
 
             file.hash_worker = worker_name
@@ -76,16 +84,18 @@ def hash_files(from_queue: queue.Queue[File | object],
 
             from_queue.task_done()
             to_queue.put(file)
+            counter.incr()
+            if counter.get_approx() % 3 == 0:
+                counter.flush()
 
     except ShutDown:
         logger.warning('Being shut down')
-        to_queue.put(sentinel, block=False)
+        to_queue.put(sentinel, block=False)  # should we really? isnt this main's resp?
 
         # while from_queue.unfinished_tasks:
         #     print(f'Removing unfinished task from queue ({worker_name})')
         #     from_queue.task_done()
 
-        return
-
     finally:
+        counter.flush()
         logger.debug('Finished')
