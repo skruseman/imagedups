@@ -7,6 +7,8 @@ import logging.config
 import threading
 import time
 import uuid
+from logging import exception
+from queue import Queue
 from typing import Optional
 
 import logging
@@ -52,20 +54,39 @@ def generate_id(cat: str = '') -> str:
     return f'{cat + '-' if cat else ''}{('0'*4 + str(last_id))[-num_len:]}'
 
 
-# def relative_path(path: pathlib.Path) -> pathlib.Path:
-#     path.
+def queue_file_for_hashing(name: str, dir_: Dir, fth_queue: Queue[File | object]):
+    file = File(
+        id=generate_id('file'),
+        name=name,
+        parent=dir_,
+        # path = pathlib.Path(path, name),
+        run_id=RUN_ID,
+    )
+    logger.debug('Assigned ID %s to: %s', file.id, dir_.path_repr + name)
+    dir_.file_ids.append(file.id)
+
+    # push the file obj for hashing
+    while True:
+        try:
+            fth_queue.put(file)  # we handle timeout ourselves for logging purposes
+            break
+        except queue.Full:
+            logger.debug('Queue of files to hash is full; will retry')
+            time.sleep(1)
+            continue
+        except Exception as e:
+            logger.exception('Error pushing file %s:%s: %s', file.id, name, e)
+            raise e
+
 
 def handle_dir(path: str, subdirs: list[str], files: list[str],
                dirs_by_path: dict[pathlib.Path, Dir], fth_queue: queue.Queue[File|object]) -> int:
     """Processes a directory found by os.walk."""
 
-    # logger.debug('Handling dir %s' % path)
-
     num_files_pushed = 0
 
     path_obj = pathlib.Path(path)
     parent_dir = dirs_by_path.get(pathlib.Path(path).parent, None)
-
     path_repr = '.' + os.path.sep + (str(path_obj.relative_to(start_dir)) + os.path.sep if parent_dir else '')
 
     dir_ = Dir(
@@ -86,7 +107,15 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
     logger.debug('Assigned ID %s to:  %s', dir_.id, dir_.path_repr)
 
     if dir_.num_dirs > 0:
+        # enable subdirs to look up this Dir instance by path
         dirs_by_path[dir_.path] = dir_
+
+    elif dir_.num_files == 0:
+        # push a dummy File instance that marks this directory is empty;
+        # no file hashing to be done, yet we later need to process and store the dir.
+        logger.info('Empty directories are NOT ignored and are stored as well: %s', dir_.path_repr)
+        fth_queue.put(File.make_empty_dir_marker(dir_))
+        return 0
 
     # dir['subdirs'] = sorted(subdirs)
 
@@ -101,40 +130,21 @@ def handle_dir(path: str, subdirs: list[str], files: list[str],
         # _dir.dir_ids.append(subdir.id)  # do i need these?
 
     for name in files:
-        file = File(
-            id = generate_id('file'),
-            name = name,
-            parent = dir_,
-            # path = pathlib.Path(path, name),
-            run_id = RUN_ID,
-        )
-        logger.debug('Assigned ID %s to: %s', file.id, dir_.path_repr + name)
-        dir_.file_ids.append(file.id)
-
-        # push the file obj for hashing
-        while True:
-            try:
-                fth_queue.put(file)
-                num_files_pushed += 1
-                break
-            except queue.Full:
-                print(f'Queue of files to hash is full; will retry')
-                time.sleep(1)
-                continue
-            except Exception as e:
-                print(f'Error pushing file {file.id}:{name}: {e}')
-                raise e
+        queue_file_for_hashing(name, dir_, fth_queue)
+        num_files_pushed += 1
 
     return num_files_pushed
 
 
 def main() -> None:
 
+    logger.info('Inspecting contents of directory: %s', start_dir)
+
     num_dirs_found = 0
     num_files_found = 0
 
-    # dir objects will be registered by path
-    # in order to (later) link them to their parent dir obj
+    # dir objects are registered by path
+    # in order to (later) link subdirs to them
     dirs_by_path: dict[pathlib.Path, Dir] = dict()
 
     # create queue for files to be hash, and a counter
@@ -194,6 +204,8 @@ def main() -> None:
             num_files_found += handle_dir(root, dirs, files, dirs_by_path, fth_queue)
             num_dirs_found += 1
 
+        logger.info('Detected %s files in %s directories', num_files_found, num_dirs_found)
+
     finally:
         # make the workers finish
         for _ in hash_workers:
@@ -226,9 +238,6 @@ def main() -> None:
         stop_event.set()
         monitor.join()
         logger.info('Monitor thread finished')
-
-    logger.info('%s dirs found', num_dirs_found)
-    logger.info('%s files found', num_files_found)
 
     assert stored_dirs_counter.get() == num_dirs_found
     assert stored_files_counter.get() == num_files_found

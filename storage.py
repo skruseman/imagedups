@@ -88,15 +88,14 @@ def calc_dirs_hash(dir_hashes: list[str]) -> str:
     (sub-)directories containing files.
     """
 
-    if not dir_hashes:
+    if not ''.join(dir_hashes):
         return ''
 
-    assert len(dir_hashes[0]) == 16  # 16 hexits representing 8 byte xxhash
     if len(dir_hashes) == 1:
         return dir_hashes[0]
 
     hasher = xxhash.xxh3_64()
-    # normalize by sorting the hashes
+    # normalize by sorting the hashes; empty hash strings are fine
     for hash_ in sorted(dir_hashes):
         hasher.update(bytes.fromhex(hash_))
     return hasher.hexdigest()
@@ -135,66 +134,87 @@ def calc_all_hash(files_hash: str, dirs_hash: str) -> str:
 
 
 def update_dir(dir_: Dir):
-    """Updates the specified dir node if possible, calculating and setting cumulative hash values.
+    """Sets the overall hash value if possible, in which case this value is passed to the parent dir
+    (as hash representing the dir).
 
-    Assumes it will not be passed a node representing an empty dir.
+    If passed a node representing an empty dir, the "files hash" and "dirs hash" are empty and so
+    will be the "all hash".
     """
 
-    # assert dir_.num_dirs > 0
-    assert dir_.num_files == 0 or dir_.files_hash
+    files_done = len(dir_.file_hashes) == dir_.num_files
+    # for dirs with only empty subdirs (including nested), the dirs hash will remain empty
+    dirs_done = len(dir_.dir_hashes) == dir_.num_dirs
 
-    if len(dir_.dir_hashes) == dir_.num_dirs:
-        if ''.join(dir_.dir_hashes) != '':  # not all empty dirs
-            if not dir_.dirs_hash:
-                dir_.dirs_hash = calc_dirs_hash(dir_.dir_hashes)
+    if files_done and dirs_done:
 
+        assert dir_.num_files == 0 or dir_.files_hash
+        assert dir_.num_dirs == 0 or (dir_.dirs_hash or ''.join(dir_.dir_hashes) == '')
+
+        # this dir is now complete
         store_dir(dir_)
 
-        if dir_.parent:  # False for root dir
-            # if dir_.files_hash and dir_.dirs_hash:
+        # propagate the dirs hash up
+        if dir_.parent:  # i.e. not root dir
             all_hash = calc_all_hash(dir_.files_hash, dir_.dirs_hash)
             if not all_hash:
-                logger.debug('Empty overall "all" hash for dir %s', dir_.path)
-            dir_.parent.dir_hashes.append(all_hash)
-            update_dir(dir_.parent)
+                logger.debug('Empty overall hash for dir %s: %s', dir_.id, dir_.path_repr)
+            update_dir_with_dir_hash(dir_.parent, all_hash)
+
+    # if len(dir_.dir_hashes) == dir_.num_dirs:
+    #     # ready to calc the dirs hash if needed ('' by default)
+    #     if ''.join(dir_.dir_hashes) != '':  # at least one dir that is not empty
+    #         if not dir_.dirs_hash:  # not yet set
+    #             dir_.dirs_hash = calc_dirs_hash(dir_.dir_hashes)
+    #
+    #     if dir_.num_files == 0 or dir_.files_hash:
+    #         # this dir is completed
+    #         store_dir(dir_)
+    #         # propagate up
+    #         if dir_.parent:  # i.e. not root dir
+    #             all_hash = calc_all_hash(dir_.files_hash, dir_.dirs_hash)
+    #             if not all_hash:
+    #                 logger.debug('Empty overall hash for dir %s: %s', dir_.id, dir_.path_repr)
+    #             dir_.parent.dir_hashes.append(all_hash)
+    #             update_dir(dir_.parent)
 
 
-def update_dir_with_file_hash(dir_: Dir):
-    """Updates the specified dir node if possible, calculating and setting cumulative hash values.
+def update_dir_with_dir_hash(dir_: Dir, dir_hash: str):
+    assert len(dir_.dir_hashes) < dir_.num_dirs  # not all contained dirs yet processed
+    dir_.dir_hashes.append(dir_hash)
+    if len(dir_.dir_hashes) == dir_.num_dirs:
+        # assert not dir_.dirs_hash or ''.join(dir_.dir_hashes) == ''
+        dir_.dirs_hash = calc_dirs_hash(dir_.dir_hashes)
+        update_dir(dir_)
 
-    Assumes it will not be passed a node representing an empty dir.
-    """
 
-    # assert dir_.num_files > 0
+def update_dir_with_file_hash(dir_: Dir, file_hash: str):
+    """Updates the dir's files hash if possible and if so, checks if the dir is complete."""
 
+    assert len(dir_.file_hashes) < dir_.num_files  # not all contained files yet processed
+    dir_.file_hashes.append(file_hash)
     if len(dir_.file_hashes) == dir_.num_files:
-        assert not dir_.files_hash
         dir_.files_hash = calc_files_hash(dir_.file_hashes)
         update_dir(dir_)
 
 
-def add_file_hash_to_dir(dir_: Dir, file_hash: str):
-    assert len(dir_.file_hashes) < dir_.num_files
-    dir_.file_hashes.append(file_hash)
-    update_dir_with_file_hash(dir_)
-
-
 def handle_file(file: File):
-    store_file(file)  # for now no actual storage
-    add_file_hash_to_dir(file.parent, file.hash)
+    """Process the file and update its containing dir(s) if possible."""
+
+    store_file(file)
+    update_dir_with_file_hash(file.parent, file.hash)
 
 
 def store(file_queue: queue.Queue[File|object],
           sentinel: object,
-          files_counter: Counter,
           dirs_counter: Counter,
+          files_counter: Counter,
           ):
 
-    global num_files_stored
     global num_dirs_stored
+    global num_files_stored
 
-    num_files_stored = files_counter
     num_dirs_stored = dirs_counter
+    num_files_stored = files_counter
 
     num_files_processed: int = 0
 
@@ -211,9 +231,14 @@ def store(file_queue: queue.Queue[File|object],
             break
 
         assert isinstance(file, File)
-        handle_file(file)
+
+        if file.marks_empty_dir():
+            # just handle the empty dir the File obj links to
+            update_dir(file.parent)
+        else:
+            handle_file(file)
+            num_files_processed += 1
         file_queue.task_done()
-        num_files_processed += 1
 
     logger.info('Processed %d queued files', num_files_processed)
 

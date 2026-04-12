@@ -28,7 +28,8 @@ last_hash: int = 0  # not thread safe! the get and set are not atomic ops
 
 
 def hash_file(path: pathlib.Path) -> str:
-    global last_hash
+
+    # global last_hash
 
     #     with open(file_path, 'rb') as f:
     #         file_hash = hashlib.md5(f.read()).hexdigest()
@@ -72,10 +73,17 @@ def hash_files(from_queue: queue.Queue[File | object],
                 break
             assert isinstance(file, File)
 
-            file.hash_worker = worker_name
-            file_path = file.parent.path / file.name
-            logger.debug('About to hash file %s', file.id)
-            file.hash = hash_file(file_path)
+            if file.marks_empty_dir():
+                logger.debug('Ignoring empty dir marker for dir: %s', file.parent.path_repr)
+            else:
+                file.hash_worker = worker_name
+                file_path = file.parent.path / file.name
+                logger.debug('About to hash file %s', file.id)
+                file.hash = hash_file(file_path)
+
+                counter.incr()
+                if counter.get_approx() % 3 == 0:
+                    counter.flush()
 
             # size, digest = hash_file(job.path, algorithm=algorithm, chunk_size=chunk_size)
 
@@ -84,9 +92,6 @@ def hash_files(from_queue: queue.Queue[File | object],
 
             from_queue.task_done()
             to_queue.put(file)
-            counter.incr()
-            if counter.get_approx() % 3 == 0:
-                counter.flush()
 
     except ShutDown:
         logger.warning('Being shut down')

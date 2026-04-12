@@ -64,3 +64,14 @@ class File:
     hash_worker: str = ""
     hash_error: str = ""
     # timestamp: float
+
+    IS_EMPTY_DIR_MARKER = 'File instance to mark an empty directory'
+
+    @staticmethod
+    def make_empty_dir_marker(dir_: Dir) -> File:
+        """Return a File instance linked to the specified directory,
+        indicating that the directory is empty."""
+        return File(id=File.IS_EMPTY_DIR_MARKER, name='', run_id='', parent=dir_, length=0)
+
+    def marks_empty_dir(self) -> bool:
+        return self.id == self.IS_EMPTY_DIR_MARKER
