@@ -17,7 +17,6 @@ from meta import Dir, File, Run
 from filehashing import hash_files
 from monitor import monitor_queues
 from storage import store
-from dirhashing import process_hashed_files  # hash_dirs?
 from utils import Counter
 
 RUN_ID = '42'
