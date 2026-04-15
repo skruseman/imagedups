@@ -11,7 +11,7 @@ from typing import Optional
 from random import random
 import logging
 
-from utils import Counter
+from utils import Counter, SENTINEL
 from meta import File
 
 
@@ -53,7 +53,6 @@ def hash_file(path: pathlib.Path) -> str:
 
 def hash_files(from_queue: queue.Queue[File | object],
                to_queue: queue.Queue[File | object],
-               sentinel: object,
                counter: Counter,
                ):
 
@@ -67,7 +66,7 @@ def hash_files(from_queue: queue.Queue[File | object],
                 counter.flush()
                 continue
 
-            if file is sentinel:
+            if file is SENTINEL:
                 logger.debug('Received sentinel')
                 from_queue.task_done()
                 break
@@ -95,7 +94,7 @@ def hash_files(from_queue: queue.Queue[File | object],
 
     except ShutDown:
         logger.warning('Being shut down')
-        to_queue.put(sentinel, block=False)  # should we really? isnt this main's resp?
+        to_queue.put(SENTINEL, block=False)  # should we really? isnt this main's resp?
 
         # while from_queue.unfinished_tasks:
         #     print(f'Removing unfinished task from queue ({worker_name})')

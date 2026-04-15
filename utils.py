@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import threading
 
+# mark in a queue that a producer is done
+SENTINEL = object()
+
 class Counter:
     """Thread safe counter, starting at 0."""
 

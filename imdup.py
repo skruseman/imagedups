@@ -17,10 +17,9 @@ from meta import Dir, File, Run
 from filehashing import hash_files
 from monitor import monitor_queues
 from storage import store
-from utils import Counter
+from utils import Counter, SENTINEL
 
 RUN_ID = '42'
-SENTINEL = object()
 
 
 logger = logging.getLogger(__name__)
@@ -160,7 +159,7 @@ def main() -> None:
         threading.Thread(
             target=hash_files,
             name=f"hash-workr-{i+1}",
-            args=(fth_queue, fh_queue, SENTINEL, hashed_files_counter),
+            args=(fth_queue, fh_queue, hashed_files_counter),
             daemon=False,
         )
         for i in range(num_hash_workers)
@@ -181,7 +180,7 @@ def main() -> None:
     store_worker = threading.Thread(
         target=store,
         name='store-worker',
-        args=(fh_queue, SENTINEL, stored_dirs_counter, stored_files_counter),
+        args=(fh_queue, stored_dirs_counter, stored_files_counter),
         daemon=False,
     )
     store_worker.start()

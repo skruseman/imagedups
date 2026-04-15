@@ -9,7 +9,7 @@ from typing import Optional
 import xxhash
 
 from meta import File, Dir
-from utils import Counter
+from utils import Counter, SENTINEL
 
 # EMPTY_HASH = ''  # for empty dirs?
 
@@ -205,7 +205,6 @@ def handle_file(file: File):
 
 
 def store(file_queue: queue.Queue[File|object],
-          sentinel: object,
           dirs_counter: Counter,
           files_counter: Counter,
           ):
@@ -225,7 +224,7 @@ def store(file_queue: queue.Queue[File|object],
             logger.debug('Queue empty; will retry get')
             continue
 
-        if file is sentinel:
+        if file is SENTINEL:
             logger.info('Received sentinel')
             file_queue.task_done()
             break
