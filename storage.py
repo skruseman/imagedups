@@ -11,8 +11,6 @@ import xxhash
 from meta import File, Dir
 from utils import Counter, SENTINEL
 
-# EMPTY_HASH = ''  # for empty dirs?
-
 TIMEOUT_SECS = 0.5
 TIMEOUT_SECS = 25
 

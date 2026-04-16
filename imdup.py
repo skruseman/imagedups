@@ -12,7 +12,7 @@ from meta import Dir, File
 from filehashing import hash_files
 from monitor import monitor_queues
 from storage import store
-from utils import Counter, SENTINEL
+from utils import Counter, SENTINEL, collect_and_store
 
 
 RUN_ID = '42'
@@ -172,9 +172,10 @@ def main() -> None:
     # create storage queue
     # storage_queue: queue.Queue[Dir] = queue.Queue()
 
+    from utils import collect_and_store
     # create storage worker
     store_worker = threading.Thread(
-        target=store,
+        target=collect_and_store,
         name='store-worker',
         args=(fh_queue, stored_dirs_counter, stored_files_counter),
         daemon=False,
