@@ -1,9 +1,26 @@
 from __future__ import annotations
 
 import threading
+import logging
 
-# mark in a queue that a producer is done
+# marker: added to a queue signals end of input
 SENTINEL = object()
+
+logger = logging.getLogger(__name__)
+
+class Storage:
+
+    def __init__(self,
+                 hashed_files_queue: queue.Queue[File|object],
+                 dirs_counter: Counter,
+                 files_counter: Counter) -> None:
+
+        self._queue = hashed_files_queue
+        self.dirs_counter = dirs_counter
+        self.files_counter = files_counter
+
+
+
 
 class Counter:
     """Thread safe counter, starting at 0."""

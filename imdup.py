@@ -1,23 +1,19 @@
-import hashlib
 import os
 import pathlib
 import queue
-import logging
 import logging.config
 import threading
 import time
-import uuid
-from logging import exception
 from queue import Queue
-from typing import Optional
 
 import logging
 
-from meta import Dir, File, Run
+from meta import Dir, File
 from filehashing import hash_files
 from monitor import monitor_queues
 from storage import store
 from utils import Counter, SENTINEL
+
 
 RUN_ID = '42'
 
@@ -244,6 +240,11 @@ def main() -> None:
 if __name__ == "__main__":
 
     logging.config.fileConfig(fname='logging.conf', disable_existing_loggers=False)
+
+    # to allow only logging from logger x
+    # console_handler = logging.getLogger().handlers[0]
+    # console_handler.addFilter(logging.Filter("utils"))
+    # Just one filter can be added!
 
     main()
 
