@@ -11,8 +11,8 @@ import logging
 from meta import Dir, File
 from filehashing import hash_files
 from monitor import monitor_queues
-from storage import store
-from utils import Counter, SENTINEL, collect_and_store
+from storage import collect_and_store
+from utils import Counter, SENTINEL
 
 
 RUN_ID = '42'
@@ -28,6 +28,7 @@ last_ids: dict[str, int] = {}
 
 start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin'
 # start_dir = 'C:\\Users\\skrus\\Dropbox\\tuin\\2025\\bloemennoord met wenda'
+# start_dir = 'E:\\MeerNoodMovesMarietta\\2020-04-13\\50 jaar M'
 start_dir_len = len(start_dir)
 
 # generate run ID as yyyyMMdd:hhmmssuuu of start (wall) time
@@ -172,8 +173,7 @@ def main() -> None:
     # create storage queue
     # storage_queue: queue.Queue[Dir] = queue.Queue()
 
-    from utils import collect_and_store
-    # create storage worker
+    # create storage worker; not safe for multiple threads because...
     store_worker = threading.Thread(
         target=collect_and_store,
         name='store-worker',
