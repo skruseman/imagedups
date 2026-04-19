@@ -11,7 +11,7 @@ import logging
 from meta import Dir, File
 from filehashing import hash_files
 from monitor import monitor_queues
-from storage import collect_and_store
+from dirhashing import collect_and_store
 from utils import Counter, SENTINEL
 
 
