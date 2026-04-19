@@ -33,7 +33,7 @@ class Counter:
         with self._lock:
             self._flush_unsafe()
 
-    def get(self) -> int:
+    def value(self) -> int:
         with self._lock:
             self._flush_unsafe()
             return self.global_value

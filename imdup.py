@@ -234,8 +234,8 @@ def main() -> None:
         monitor.join()
         logger.info('Monitor thread finished')
 
-    assert stored_dirs_counter.get() == num_dirs_found
-    assert stored_files_counter.get() == num_files_found
+    assert stored_dirs_counter.value() == num_dirs_found
+    assert stored_files_counter.value() == num_files_found
 
 
 if __name__ == "__main__":
