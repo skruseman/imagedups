@@ -23,7 +23,7 @@ def collect_and_store(hashed_files: queue.Queue[File | object],
 
 
     """
-    Storage().run(hashed_files, dirs_counter, files_counter)
+    Storage(dirs_counter, files_counter).run(hashed_files)
 
 
 class Storage:
@@ -126,9 +126,6 @@ class Storage:
 
         self.dirs_counter = dirs_counter
         self.files_counter = files_counter
-
-        self.dirs_queue = deque()
-        self.files_queue = deque()
 
     def pop(self, hashed_files: queue.Queue[File | object], ) -> Iterable[File]:
         """Generator for popping File objects from the queue. Use locally only."""
