@@ -2,11 +2,15 @@ syntax = "proto3";
 
 package demo;
 
-message UserRecord {
+message RunRecord {
     uint32 schema_version = 1;
-    string user_id = 2;
-    string name = 3;
-    string email = 4;
-    repeated string tags = 5;
-    int64 updated_unix_ts = 6;
+    string path = 2;
+    string description = 3;
+    string platform = 4;
+    float date_time = 5;
+    float dur_secs = 6;
+    string status = 7;
+    uint32 num_dirs = 8;
+    uint32 num_files = 9;
+    string error = 11;
 }

@@ -18,36 +18,41 @@ from typing import Optional, Iterable
 @dataclass(frozen=False)
 class Run:
     id: str  # r'0001' and up i.e. 4 bytes
+    path: str
     description: str
     specification: str
     start_time: float
     end_time: float
     duration: float
-    status: str
+    extra: dict[str, str] = dataclasses.field(default_factory=dict)
+    status: str = 'init'
+    num_dirs: int = -1
+    num_files: int = -1
+    error: Optional[str] = None
 
 
 @dataclass(frozen=False)
 class Dir:
-    # name: str
     id: str  # 36 , str(uuid.uuid4()) ; prepend with run id?
-    run_id: str  # 36
-    path: pathlib.Path
+    name: str
+    rel_path: pathlib.Path
+    run: Run
     path_repr: str
 
-    num_files: int
-    num_dirs: int
+    num_files: int = -1
+    num_dirs: int = -1
     file_ids: list[str]
     dir_ids: list[str]
 
     parent: Optional[Dir] = None  # None for top dir
 
-    # files_found: bool = False  #
-    dir_hashes: list[str] = dataclasses.field(default_factory=list)
     file_hashes: list[str] = dataclasses.field(default_factory=list)
+    dir_hashes: list[str] = dataclasses.field(default_factory=list)
     files_hash: str = ''  # 16 hexits for xxhash.xxh3_64
     dirs_hash: str = ''  # 16 hexits for xxhash.xxh3_64
+
     # the overall "all" hash to be passed to the parent dir
-    all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
+    # all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
     # timestamp: float
 
@@ -56,21 +61,25 @@ class Dir:
 class File:
     id: str
     name: str
-    # path: pathlib.Path
-    run_id: str
-    parent: Dir
+    rel_path: pathlib.Path
+    run: Run
+    dir: Dir
     length: int = -1
     hash: str = ""
-    hash_worker: str = ""
-    hash_error: str = ""
-    # timestamp: float
+    hash_duration: float = -1
+    hash_worker: Optional[str] = None
+    hash_error: Optional[str] = None
+    creation_time: Optional[float] = None
+    last_mod_time: Optional[float] = None
+    # age_secs: Optional[float] = None
 
     IS_EMPTY_DIR_MARKER = 'File instance to mark an empty directory'
 
     @staticmethod
     def make_empty_dir_marker(dir_: Dir) -> File:
-        """Return a File instance linked to the specified directory,
+        """Return a File instance pointing to the specified directory,
         indicating that the directory is empty."""
+
         return File(id=File.IS_EMPTY_DIR_MARKER, name='', run_id='', parent=dir_, length=0)
 
     def marks_empty_dir(self) -> bool:

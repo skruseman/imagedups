@@ -9,14 +9,14 @@ Locate image file duplicates across file systems. - Mar. 2026
 
   protoc --proto_path=. --python_out=. --pyi_out=. record.proto
 
-  , which will generate record_pb2.py
+  , which will generate record_pb2.py(i)
 
 
 ## Usage
 
 To use the tool, run the following command:
 
-python imagedups.py --path /path/to/images
+python imdup.py --path /path/to/images
 
 
 ## Design motivation

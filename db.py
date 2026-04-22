@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import deque
 from pathlib import Path
 from typing import Optional
@@ -11,7 +12,7 @@ import lmdb
 
 from meta import File, Dir, Run
 from utils import Counter, SENTINEL
-# from record_pb2 import FileRecord, FileHashRecord, DirRecord, DirHashRecord, RunRecord
+import record_pb2
 
 SCHEMA_VERSION = 1
 MAP_SIZE = 2**32
@@ -62,8 +63,8 @@ class Db:
     @staticmethod
     def open(
             path: Path = Path('.'),  # path to dir with data and lock file; can be relative?
-            readonly: bool = True,
             *,
+            readonly: bool = True,
             create: bool = False,
     ) -> Db:
 
@@ -79,7 +80,6 @@ class Db:
             metasync=True,
             readahead=True,
             meminit=False,
-
         )
 
         # attempt to open;
@@ -89,15 +89,24 @@ class Db:
 
         # on open: log info on readonly, create, etc
 
-        env = lmdb.open(**kwargs)
+        try:
+            env = lmdb.open(**kwargs)
 
+        except lmdb.Error as exc:
+            if re.match('.*cannot find the path specified.*', exc.args[0]):
+                raise exc  # to be elab.
+            else:
+                logger.warning(exc, exc_info=True)
+                raise exc
+
+        db_name = path.name
+        logger.info('Opened database %s: readonly=%s', db_name, readonly)
         return Db(env)
 
     def __init__(self, lmdb_env: lmdb.Environment):
         self.env = lmdb_env
         self.dirs_queue = deque()
         self.files_queue = deque()
-        pass
 
     def store_file(self, file: File):
         self.files_queue.append(file)
@@ -155,7 +164,7 @@ class Db:
         logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
 
 
-    def store_run(self, run: Run):
+    def put_run(self, run: Run):
         #
 
         logger.debug('Stored run %s', run.id)
