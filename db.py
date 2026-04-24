@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Optional
 
 import lmdb
+from google.protobuf.message import EncodeError
 
+# from lmdb_experi import mk_run_key
 # from enum import nonmember
 
 from meta import File, Dir, Run
@@ -163,11 +165,62 @@ class Db:
         num_dirs_stored.incr()
         logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
 
+    @staticmethod
+    def mk_run_key(run_id) -> bytes:
+        return bytes(f'r:{run_id}', 'utf-8')
+
+    @staticmethod
+    def mk_run_rec(run: Run) -> bytes:
+        rec = record_pb2.RunRecord(
+            schema_version=1,
+            path=run.path,
+            description=run.description,
+            platform=run.specification,
+            date_time=run.start_time,
+            dur_secs=run.duration,
+            status=run.status,
+            num_dirs=run.num_dirs,
+            num_files=run.num_files,
+            extra=run.extra,
+            error=run.error,
+        )
+
+        try:
+            return rec.SerializeToString()
+        except EncodeError:
+            pass  # do what now?
+
 
     def put_run(self, run: Run):
-        #
+        key = self.mk_run_key(run.id)
 
         logger.debug('Stored run %s', run.id)
+
+    def get_run(self, run_id: int) -> Run:
+        """Do I actually want a Run obj returned?
+        What use cases?
+        Only for info to the user?
+        Verify: num Files/Dirs vs what the Run obj tells?
+
+        And what for getting Files and Dirs?
+        """
+
+        key = self.mk_run_key(run_id)
+
+        # read the encoded record
+        data = b''
+
+        from google.protobuf.message import DecodeError
+
+        msg = record_pb2.RunRecord()
+        try:
+            msg.ParseFromString(data)
+        except DecodeError:
+            pass  # do what?
+
+        # verify schema version; what if diffs?
+
+        # compose Run obj from the decoded record
 
 
     def update_run(self, run: Run):

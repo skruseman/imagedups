@@ -41,8 +41,8 @@ class Dir:
 
     num_files: int = -1
     num_dirs: int = -1
-    file_ids: list[str]
-    dir_ids: list[str]
+    file_ids: list[str] = dataclasses.field(default_factory=list)
+    dir_ids: list[str] = dataclasses.field(default_factory=list)
 
     parent: Optional[Dir] = None  # None for top dir
 
