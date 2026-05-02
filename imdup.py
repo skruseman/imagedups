@@ -48,6 +48,15 @@ def generate_id(cat: str = '') -> str:
     num_len = 4
     return f'{cat + '-' if cat else ''}{('0'*4 + str(last_id))[-num_len:]}'
 
+def mkid(last: int) -> str:
+    """Returns a string that represents the hex
+    value of a two-byte unsigned int value."""
+    assert last >= 0
+    ival = last + 1
+    # assert ival < 256
+    bval = ival.to_bytes(length=2)
+    sval = bval.hex()
+    return sval
 
 def queue_file_for_hashing(name: str, dir_: Dir, fth_queue: Queue[File | object]):
     file = File(

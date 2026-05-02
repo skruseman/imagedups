@@ -14,10 +14,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Iterable
 
+from identifier import Id
 
 @dataclass(frozen=False)
 class Run:
-    id: str  # r'0001' and up i.e. 4 bytes
+    id: Id
     path: str
     description: str
     specification: str
@@ -33,7 +34,7 @@ class Run:
 
 @dataclass(frozen=False)
 class Dir:
-    id: str  # 36 , str(uuid.uuid4()) ; prepend with run id?
+    id: Id
     name: str
     rel_path: pathlib.Path
     run: Run
@@ -59,7 +60,7 @@ class Dir:
 
 @dataclass(frozen=False)
 class File:
-    id: str
+    id: Id
     name: str
     rel_path: pathlib.Path
     run: Run

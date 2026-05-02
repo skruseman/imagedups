@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import lmdb
-from google.protobuf.message import EncodeError
+from google.protobuf.message import EncodeError, DecodeError
 
 # from lmdb_experi import mk_run_key
 # from enum import nonmember
@@ -110,6 +110,34 @@ class Db:
         self.dirs_queue = deque()
         self.files_queue = deque()
 
+    def max_run_id(self) -> int:
+        prefix = b"r:"
+        max_id = 0
+        last_key = b''
+        with self.env.begin() as txn:
+            with txn.cursor() as cur:
+                if cur.set_range(prefix):
+                    for key, _ in cur:
+                        if not key.startswith(prefix):
+                            break
+                        last_key = key
+
+        if last_key:
+            last_key_str = last_key.decode()
+            last_id_str = last_key_str.split(':')[1]
+            max_id = int.from_bytes(bytes.fromhex(last_id_str))
+
+            # or:
+            len_id = 2
+            # last_id_bytes = bytes.fromhex(last_key[len(prefix):])
+            last_id_bytes = bytes.fromhex(last_key[-len_id:])
+            max_id = int.from_bytes(last_id_bytes)
+
+        return max_id
+
+
+                        print(key, value)
+
     def store_file(self, file: File):
         self.files_queue.append(file)
         if len(self.files_queue) > 3:
@@ -165,14 +193,16 @@ class Db:
         num_dirs_stored.incr()
         logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
 
+    RUN_PREFIX = 'r'
+
     @staticmethod
-    def mk_run_key(run_id) -> bytes:
+    def mk_run_key(run_id: str) -> bytes:
         return bytes(f'r:{run_id}', 'utf-8')
 
     @staticmethod
     def mk_run_rec(run: Run) -> bytes:
         rec = record_pb2.RunRecord(
-            schema_version=1,
+            schema_version=SCHEMA_VERSION,
             path=run.path,
             description=run.description,
             platform=run.specification,
@@ -187,16 +217,25 @@ class Db:
 
         try:
             return rec.SerializeToString()
-        except EncodeError:
+        except EncodeError as exc:
             pass  # do what now?
-
+            raise exc
 
     def put_run(self, run: Run):
         key = self.mk_run_key(run.id)
+        value = self.mk_run_rec(run)
+        print(key)
+        print(value)
 
-        logger.debug('Stored run %s', run.id)
+        with self.env.begin(write=True) as txn:
+            try:
+                txn.put(key, value)
+            except EncodeError as exc:
+                # do what?
+                raise exc
+        logger.warning('Stored run %s', run.id)
 
-    def get_run(self, run_id: int) -> Run:
+    def get_run(self, run_id: str) -> Run:
         """Do I actually want a Run obj returned?
         What use cases?
         Only for info to the user?
@@ -205,25 +244,46 @@ class Db:
         And what for getting Files and Dirs?
         """
 
-        key = self.mk_run_key(run_id)
-
         # read the encoded record
-        data = b''
+        with self.env.begin(write=False) as txn:
+            try:
+                value = txn.get(self.mk_run_key(run_id))
+            except DecodeError as exc:
+                # do what?
+                raise exc
 
-        from google.protobuf.message import DecodeError
-
-        msg = record_pb2.RunRecord()
+        run_rec = record_pb2.RunRecord()
         try:
-            msg.ParseFromString(data)
-        except DecodeError:
+            run_rec.ParseFromString(value)
+        except DecodeError as exc:
             pass  # do what?
+            raise exc
 
-        # verify schema version; what if diffs?
+        # verify schema version; what if different?
+        if run_rec.schema_version != SCHEMA_VERSION:
+            raise ValueError('Schema version mismatch')
 
         # compose Run obj from the decoded record
-
+        run = Run(
+            id=run_id,
+            path=run_rec.path,
+            description=run_rec.description,
+            specification=run_rec.platform,
+            start_time=run_rec.date_time,
+            end_time=run_rec.date_time,
+            duration=run_rec.dur_secs,
+            extra=dict(run_rec.extra),
+            status=run_rec.status,
+            num_dirs=run_rec.num_dirs,
+            num_files=run_rec.num_files,
+            error=run_rec.error,
+        )
+        return run
 
     def update_run(self, run: Run):
-        # update the relevant Run record with the changed values; for finishing a run
+        # update the relevant Run record with the changed values;
+        # for finishing a run
+        #
+        # since we use lmdb, an upate is simply a re-write.
 
-        logger.debug('Updated run %s', run.id)
+        self.put_run(run)
