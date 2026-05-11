@@ -30,7 +30,7 @@ def test_id_serializes_to_big_endian_bytes_and_hex():
     assert identifier.to_bytes() == b"\x01\x02"
     assert identifier.to_hex() == "0102"
     assert str(identifier) == "258"
-    assert repr(identifier) == "Id258"
+    assert repr(identifier) == "Id(258)"
 
 
 def test_subid_uses_parent_bytes_and_level_one_counter():
@@ -71,5 +71,5 @@ def test_subid_rejects_nesting_beyond_two_levels():
     child = SubId(parent)
     grandchild = SubId(child)
 
-    with pytest.raises(AssertionError, match="No unexpected nesting level"):
+    with pytest.raises(AssertionError, match="Nesting beyond two sub-levels is not supported"):
         SubId(grandchild)

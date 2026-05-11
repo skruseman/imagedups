@@ -20,26 +20,13 @@ class Id:
         return self.to_bytes().hex()
 
     def __repr__(self) -> str:
-        return self.__class__.__name__ + str(self)
+        return self.__class__.__name__ + f'({self})'
 
     def __str__(self) -> str:
         return str(self.val)
 
 
 class SubId(Id):
-
-    def __repr__(self) -> str:
-        return self.__class__.__name__ + str(self)
-
-    def __str__(self) -> str:
-        return str(tuple(self._list_values()))
-
-    def _list_values(self) -> list[int]:
-        if isinstance(self.sup, SubId):
-            rv = self.sup._list_values()
-            rv.append(self.val)
-            return rv
-        return [self.sup.val, self.val]
 
     class Level(Enum):
         ONE = 1
@@ -58,7 +45,7 @@ class SubId(Id):
     def __init__(self, sup: Id):
         self.sup = sup
         if isinstance(sup, SubId):
-            assert sup.level == SubId.Level.ONE, "No unexpected nesting level"
+            assert sup.level == SubId.Level.ONE, "Nesting beyond two sub-levels is not supported"
             self.level = SubId.Level.TWO
         else:  # sup is of class: Id
             self.level = SubId.Level.ONE
@@ -71,3 +58,14 @@ class SubId(Id):
 
     def to_bytes(self) -> bytes:
         return self.sup.to_bytes() + super().to_bytes()
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__ + str(self)
+
+    def __str__(self) -> str:
+        return str(tuple(self._list_values()))
+
+    def _list_values(self) -> list[int]:
+        if isinstance(self.sup, SubId):
+            return self.sup._list_values() + [self.val]
+        return [self.sup.val, self.val]
