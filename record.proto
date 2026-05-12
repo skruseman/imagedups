@@ -2,16 +2,118 @@ syntax = "proto3";
 
 package demo;
 
+// Metadata for one duplicate-image scan run.
+// The lmdb key used with this msg type is:
+//   the id of the run as an int encoded in 2 bytes
 message RunRecord {
+    // Version of this protobuf schema used when the record was written.
     uint32 schema_version = 1;
-    string path = 2;
-    string description = 3;
-    string platform = 4;
-    float date_time = 5;
-    float dur_secs = 6;
-    string status = 7;
-    uint32 num_dirs = 8;
-    uint32 num_files = 9;
-    map<string,string> extra = 10;
-    string error = 11;
+
+    // Identifier for this run (unique within the database).
+    uint32 id = 2;
+
+    // Root directory (starting point) used by the run.
+    string path = 3;
+
+    // Optional human-readable label for the run.
+    string description = 4;
+
+    // Platform or host information captured for the run.
+    string platform = 5;
+
+    // Run start timestamp.
+    float date_time = 6;
+
+    // Total runtime in seconds.
+    float dur_secs = 7;
+
+    // Final run status, such as completed or failed.
+    string status = 8;
+
+    // Identifier of the root directory.
+    uint32 root_id = 9;
+
+    // Number of directories seen during the run.
+    uint32 num_dirs = 10;
+
+    // Number of files seen during the run.
+    uint32 num_files = 11;
+
+    // Extra run metadata not represented by dedicated fields.
+    map<string,string> extra = 12;
+
+    // Error details when the run did not complete successfully.
+    string error = 13;
+}
+
+// Directory metadata captured during a scan run.
+// The lmdb key used with this msg type is:
+//   - the id of the run: an int encoded in 2 bytes
+//   - the id of the dir: an int encoded in 2 bytes
+message DirRecord {
+    // Version of this protobuf schema used when the record was written.
+    uint32 schema_version = 1;
+
+    // Identifier of the run that produced this directory record.
+    uint32 run_id = 2;
+
+    // Directory identifier unique within the run.
+    uint32 id = 3;
+
+    // Parent directory identifier (unique within the run); 0 for root dir.
+    uint32 parent_id = 4;
+
+    // Path of the directory relative to the run's root directory; empty for root dir.
+    string path = 5;
+
+    // Directory timestamp captured during the scan.
+    float date_time = 6;
+
+    // Overall hash of the directory (xxhash, 8 bytes).
+    bytes hash = 7;
+
+    // Hash of the files in the directory (xxhash, 8 bytes).
+    bytes files_hash = 8;
+
+    // Hash of the directories contained in the directory (xxhash, 8 bytes).
+    bytes dirs_hash = 9;
+
+    // Number of entries contained in this directory.
+    uint32 num_entries = 10;
+
+    // Child directory identifiers (unique within the run).
+    repeated uint32 dir_id = 11;
+
+    // Contained file identifiers (unique within the run).
+    repeated uint32 file_id = 12;
+}
+
+// File metadata captured during a scan run.
+//   - the id of the run: an int encoded in 2 bytes
+//   - the id of the dir: an int encoded in 2 bytes
+//   - the id of the file: an int encoded in 4 bytes
+message FileRecord {
+    // Version of this protobuf schema used when the record was written.
+    uint32 schema_version = 1;
+
+    // Identifier of the run that produced this file record.
+    uint32 run_id = 2;
+
+    // File identifier unique within the run.
+    uint32 id = 3;
+
+    // Identifier of containing directory (unique within the run).
+    uint32 dir_id = 4;
+
+    // File name.
+    string name = 5;
+
+    // File timestamp captured during the scan.
+    float date_time = 6;
+
+    // File length.
+    uint64 length = 7;
+
+    // File hash (sha256).
+    bytes hash = 8;
 }
