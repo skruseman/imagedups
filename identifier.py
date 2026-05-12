@@ -62,14 +62,14 @@ class CompositeId(Id):
         Level.TWO: 4,
     }
 
-    @staticmethod
-    def _max_value(level: CompositeId.Level) -> int:
-        return 256**CompositeId.NUM_BYTES[level] - 1
-
     _last_id_by_level = {
         Level.ONE: 0,
         Level.TWO: 0,
     }
+
+    @staticmethod
+    def _max_value(level: CompositeId.Level) -> int:
+        return 256**CompositeId.NUM_BYTES[level] - 1
 
     def __init__(self, base: Id):
         self.base = base
@@ -79,17 +79,17 @@ class CompositeId(Id):
         else:  # base is of class: Id
             self.level = CompositeId.Level.ONE
 
-        last_id = CompositeId._last_id_by_level[self.level]
+        last_id = self._last_id()
         val = last_id + 1
         assert val <= self._max_value(self.level), ValueError("Exceeds max value")
         super().__init__(val, num_bytes=CompositeId.NUM_BYTES[self.level])
-        CompositeId._last_id_by_level[self.level] = val
+        self._set_last_id(val)
 
     def to_bytes(self) -> bytes:
         return self.base.to_bytes() + super().to_bytes()
 
     def __repr__(self) -> str:
-        return self.__class__.__name__ + str(self)
+        return CompositeId.__name__ + str(self)
 
     def __str__(self) -> str:
         return str(tuple(self._list_values()))
@@ -98,3 +98,17 @@ class CompositeId(Id):
         if isinstance(self.base, CompositeId):
             return self.base._list_values() + [self.val]
         return [self.base.val, self.val]
+
+    def _last_id(self) -> int:
+        msv = self._find_most_significant_value()
+        return CompositeId._last_id_by_level[self.level]
+
+    def _set_last_id(self, value):
+        msv = self._find_most_significant_value()
+        CompositeId._last_id_by_level[self.level] = value
+
+    def _find_most_significant_value(self):
+        base = self.base
+        while isinstance(base, CompositeId):
+            base = base.base
+        return base.val
