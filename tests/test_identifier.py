@@ -5,10 +5,7 @@ from identifier import Id, CompositeId
 
 @pytest.fixture(autouse=True)
 def reset_composite_id_counters():
-    CompositeId._last_id_by_level = {
-        CompositeId.Level.ONE: 0,
-        CompositeId.Level.TWO: 0,
-    }
+    CompositeId._last_value_by_base = {}
 
 
 def test_id_rejects_non_positive_values():
@@ -38,13 +35,13 @@ def test_composite_id_uses_parent_bytes_and_level_one_counter():
     first = CompositeId(parent)
     second = CompositeId(parent)
 
-    assert first.level is CompositeId.Level.ONE
+    assert first.level == 1
     assert first.val == 1
     assert first.to_bytes() == b"\x00\x07\x00\x01"
     assert str(first) == "(7, 1)"
     assert repr(first) == "CompositeId(7, 1)"
 
-    assert second.level is CompositeId.Level.ONE
+    assert second.level == 1
     assert second.val == 2
     assert second.to_bytes() == b"\x00\x07\x00\x02"
 
@@ -55,21 +52,24 @@ def test_nested_composite_id_uses_parent_chain_and_level_two_counter():
     grandchild = CompositeId(child)
     another_grandchild = CompositeId(child)
 
-    assert grandchild.level is CompositeId.Level.TWO
+    assert grandchild.level == 2
     assert grandchild.val == 1
     assert grandchild.to_bytes() == b"\x00\x07\x00\x01\x00\x00\x00\x01"
     assert str(grandchild) == "(7, 1, 1)"
     assert repr(grandchild) == "CompositeId(7, 1, 1)"
 
-    assert another_grandchild.level is CompositeId.Level.TWO
+    assert another_grandchild.level == 2
     assert another_grandchild.val == 2
     assert another_grandchild.to_bytes() == b"\x00\x07\x00\x01\x00\x00\x00\x02"
 
 
-def test_composite_id_rejects_nesting_beyond_two_levels():
+def test_composite_id_uses_default_num_bytes_for_nesting_beyond_two_levels():
+    level3 = 3
+    assert level3 not in CompositeId.NUM_BYTES_BY_LEVEL
+
     parent = Id(7)
     child = CompositeId(parent)
     grandchild = CompositeId(child)
-
-    with pytest.raises(AssertionError, match="Nesting beyond two sub-levels is not supported"):
-        CompositeId(grandchild)
+    greatgrandchild = CompositeId(grandchild)
+    assert greatgrandchild.level == 3
+    assert greatgrandchild.num_bytes == CompositeId.DEFAULT_NUM_BYTES

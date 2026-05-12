@@ -3,8 +3,6 @@ syntax = "proto3";
 package demo;
 
 // Metadata for one duplicate-image scan run.
-// The lmdb key used with this msg type is:
-//   the id of the run as an int encoded in 2 bytes
 message RunRecord {
     // Version of this protobuf schema used when the record was written.
     uint32 schema_version = 1;
@@ -47,9 +45,6 @@ message RunRecord {
 }
 
 // Directory metadata captured during a scan run.
-// The lmdb key used with this msg type is:
-//   - the id of the run: an int encoded in 2 bytes
-//   - the id of the dir: an int encoded in 2 bytes
 message DirRecord {
     // Version of this protobuf schema used when the record was written.
     uint32 schema_version = 1;
@@ -60,7 +55,7 @@ message DirRecord {
     // Directory identifier unique within the run.
     uint32 id = 3;
 
-    // Parent directory identifier (unique within the run); 0 for root dir.
+    // Parent directory identifier; 0 for root dir.
     uint32 parent_id = 4;
 
     // Path of the directory relative to the run's root directory; empty for root dir.
@@ -70,7 +65,7 @@ message DirRecord {
     float date_time = 6;
 
     // Overall hash of the directory (xxhash, 8 bytes).
-    bytes hash = 7;
+    bytes all_hash = 7;
 
     // Hash of the files in the directory (xxhash, 8 bytes).
     bytes files_hash = 8;
@@ -81,17 +76,14 @@ message DirRecord {
     // Number of entries contained in this directory.
     uint32 num_entries = 10;
 
-    // Child directory identifiers (unique within the run).
+    // Identifiers of contained directories.
     repeated uint32 dir_id = 11;
 
-    // Contained file identifiers (unique within the run).
+    // Identifiers of contained files.
     repeated uint32 file_id = 12;
 }
 
 // File metadata captured during a scan run.
-//   - the id of the run: an int encoded in 2 bytes
-//   - the id of the dir: an int encoded in 2 bytes
-//   - the id of the file: an int encoded in 4 bytes
 message FileRecord {
     // Version of this protobuf schema used when the record was written.
     uint32 schema_version = 1;
@@ -102,11 +94,11 @@ message FileRecord {
     // File identifier unique within the run.
     uint32 id = 3;
 
-    // Identifier of containing directory (unique within the run).
-    uint32 dir_id = 4;
-
     // File name.
-    string name = 5;
+    string name = 4;
+
+    // Identifier of containing directory.
+    uint32 dir_id = 5;
 
     // File timestamp captured during the scan.
     float date_time = 6;
