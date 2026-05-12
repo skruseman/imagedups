@@ -135,9 +135,6 @@ class Db:
 
         return max_id
 
-
-                        print(key, value)
-
     def store_file(self, file: File):
         self.files_queue.append(file)
         if len(self.files_queue) > 3:
