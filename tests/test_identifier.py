@@ -1,13 +1,13 @@
 import pytest
 
-from identifier import Id, SubId
+from identifier import Id, CompositeId
 
 
 @pytest.fixture(autouse=True)
-def reset_subid_counters():
-    SubId._last_id_by_level = {
-        SubId.Level.ONE: 0,
-        SubId.Level.TWO: 0,
+def reset_composite_id_counters():
+    CompositeId._last_id_by_level = {
+        CompositeId.Level.ONE: 0,
+        CompositeId.Level.TWO: 0,
     }
 
 
@@ -33,43 +33,43 @@ def test_id_serializes_to_big_endian_bytes_and_hex():
     assert repr(identifier) == "Id(258)"
 
 
-def test_subid_uses_parent_bytes_and_level_one_counter():
+def test_composite_id_uses_parent_bytes_and_level_one_counter():
     parent = Id(7)
-    first = SubId(parent)
-    second = SubId(parent)
+    first = CompositeId(parent)
+    second = CompositeId(parent)
 
-    assert first.level is SubId.Level.ONE
+    assert first.level is CompositeId.Level.ONE
     assert first.val == 1
     assert first.to_bytes() == b"\x00\x07\x00\x01"
     assert str(first) == "(7, 1)"
-    assert repr(first) == "SubId(7, 1)"
+    assert repr(first) == "CompositeId(7, 1)"
 
-    assert second.level is SubId.Level.ONE
+    assert second.level is CompositeId.Level.ONE
     assert second.val == 2
     assert second.to_bytes() == b"\x00\x07\x00\x02"
 
 
-def test_nested_subid_uses_parent_chain_and_level_two_counter():
+def test_nested_composite_id_uses_parent_chain_and_level_two_counter():
     parent = Id(7)
-    child = SubId(parent)
-    grandchild = SubId(child)
-    another_grandchild = SubId(child)
+    child = CompositeId(parent)
+    grandchild = CompositeId(child)
+    another_grandchild = CompositeId(child)
 
-    assert grandchild.level is SubId.Level.TWO
+    assert grandchild.level is CompositeId.Level.TWO
     assert grandchild.val == 1
     assert grandchild.to_bytes() == b"\x00\x07\x00\x01\x00\x00\x00\x01"
     assert str(grandchild) == "(7, 1, 1)"
-    assert repr(grandchild) == "SubId(7, 1, 1)"
+    assert repr(grandchild) == "CompositeId(7, 1, 1)"
 
-    assert another_grandchild.level is SubId.Level.TWO
+    assert another_grandchild.level is CompositeId.Level.TWO
     assert another_grandchild.val == 2
     assert another_grandchild.to_bytes() == b"\x00\x07\x00\x01\x00\x00\x00\x02"
 
 
-def test_subid_rejects_nesting_beyond_two_levels():
+def test_composite_id_rejects_nesting_beyond_two_levels():
     parent = Id(7)
-    child = SubId(parent)
-    grandchild = SubId(child)
+    child = CompositeId(parent)
+    grandchild = CompositeId(child)
 
     with pytest.raises(AssertionError, match="Nesting beyond two sub-levels is not supported"):
-        SubId(grandchild)
+        CompositeId(grandchild)
