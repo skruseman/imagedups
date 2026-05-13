@@ -19,12 +19,13 @@ from identifier import Id
 @dataclass(frozen=False)
 class Run:
     id: Id
-    path: str
+    path: pathlib.Path
     description: str
-    specification: str
+    platform: str
     start_time: float
     end_time: float
     duration: float
+    root_dir: Optional[Dir] = None
     extra: dict[str, str] = dataclasses.field(default_factory=dict)
     status: str = 'init'
     num_dirs: int = -1
@@ -34,18 +35,19 @@ class Run:
 
 @dataclass(frozen=False)
 class Dir:
+    run: Run
     id: Id
     name: str
-    rel_path: pathlib.Path
-    run: Run
+    path: pathlib.Path
     path_repr: str
+    timestamp: float
+
+    parent: Optional[Dir] = None  # None for root dir
 
     num_files: int = -1
     num_dirs: int = -1
     file_ids: list[str] = dataclasses.field(default_factory=list)
     dir_ids: list[str] = dataclasses.field(default_factory=list)
-
-    parent: Optional[Dir] = None  # None for top dir
 
     file_hashes: list[str] = dataclasses.field(default_factory=list)
     dir_hashes: list[str] = dataclasses.field(default_factory=list)
@@ -53,26 +55,26 @@ class Dir:
     dirs_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
     # the overall "all" hash to be passed to the parent dir
-    # all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
-
-    # timestamp: float
+    all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
 
 @dataclass(frozen=False)
 class File:
+    run: Run
     id: Id
     name: str
-    rel_path: pathlib.Path
-    run: Run
+    path: pathlib.Path
     dir: Dir
     length: int = -1
+
+    creation_time: Optional[float] = None
+    last_mod_time: Optional[float] = None
+    # age_secs: Optional[float] = None
+
     hash: str = ""
     hash_duration: float = -1
     hash_worker: Optional[str] = None
     hash_error: Optional[str] = None
-    creation_time: Optional[float] = None
-    last_mod_time: Optional[float] = None
-    # age_secs: Optional[float] = None
 
     IS_EMPTY_DIR_MARKER = 'File instance to mark an empty directory'
 

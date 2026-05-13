@@ -9,6 +9,7 @@ from typing import Optional
 import lmdb
 from google.protobuf.message import EncodeError, DecodeError
 
+from identifier import Id
 # from lmdb_experi import mk_run_key
 # from enum import nonmember
 
@@ -68,7 +69,7 @@ class Db:
             *,
             readonly: bool = True,
             create: bool = False,
-    ) -> Db:
+    ) -> Db:  # lmdb env
 
         kwargs = dict(
             path=str(path),
@@ -193,16 +194,17 @@ class Db:
     RUN_PREFIX = 'r'
 
     @staticmethod
-    def mk_run_key(run_id: str) -> bytes:
-        return bytes(f'r:{run_id}', 'utf-8')
+    def mk_run_key(run_id: Id) -> bytes:
+        return run_id.to_bytes()
 
     @staticmethod
     def mk_run_rec(run: Run) -> bytes:
         rec = record_pb2.RunRecord(
             schema_version=SCHEMA_VERSION,
-            path=run.path,
+            id=run.id.val,
+            path=str(run.path),
             description=run.description,
-            platform=run.specification,
+            platform=run.platform,
             date_time=run.start_time,
             dur_secs=run.duration,
             status=run.status,
@@ -221,8 +223,8 @@ class Db:
     def put_run(self, run: Run):
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
-        print(key)
-        print(value)
+        # print(key)
+        # print(value)
 
         with self.env.begin(write=True) as txn:
             try:
@@ -232,7 +234,7 @@ class Db:
                 raise exc
         logger.warning('Stored run %s', run.id)
 
-    def get_run(self, run_id: str) -> Run:
+    def get_run(self, run_id: Id) -> Run:
         """Do I actually want a Run obj returned?
         What use cases?
         Only for info to the user?
@@ -249,6 +251,10 @@ class Db:
                 # do what?
                 raise exc
 
+        if not value:
+            raise RuntimeError(f'No run {run_id} found')
+            # logger.warning('No run %s found', run_id)
+
         run_rec = record_pb2.RunRecord()
         try:
             run_rec.ParseFromString(value)
@@ -263,9 +269,9 @@ class Db:
         # compose Run obj from the decoded record
         run = Run(
             id=run_id,
-            path=run_rec.path,
+            path=Path(run_rec.path),
             description=run_rec.description,
-            specification=run_rec.platform,
+            platform=run_rec.platform,
             start_time=run_rec.date_time,
             end_time=run_rec.date_time,
             duration=run_rec.dur_secs,
