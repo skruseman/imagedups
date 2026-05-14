@@ -43,7 +43,7 @@ class RunRecord(_message.Message):
     def __init__(self, schema_version: _Optional[int] = ..., id: _Optional[int] = ..., path: _Optional[str] = ..., description: _Optional[str] = ..., platform: _Optional[str] = ..., date_time: _Optional[float] = ..., dur_secs: _Optional[float] = ..., status: _Optional[str] = ..., root_id: _Optional[int] = ..., num_dirs: _Optional[int] = ..., num_files: _Optional[int] = ..., extra: _Optional[_Mapping[str, str]] = ..., error: _Optional[str] = ...) -> None: ...
 
 class DirRecord(_message.Message):
-    __slots__ = ["schema_version", "run_id", "id", "parent_id", "path", "date_time", "all_hash", "files_hash", "dirs_hash", "num_entries", "dir_id", "file_id"]
+    __slots__ = ["schema_version", "run_id", "id", "parent_id", "path", "date_time", "all_hash", "files_hash", "dirs_hash", "num_files", "num_dirs", "file_ids", "dir_ids"]
     SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
     RUN_ID_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
@@ -53,22 +53,24 @@ class DirRecord(_message.Message):
     ALL_HASH_FIELD_NUMBER: _ClassVar[int]
     FILES_HASH_FIELD_NUMBER: _ClassVar[int]
     DIRS_HASH_FIELD_NUMBER: _ClassVar[int]
-    NUM_ENTRIES_FIELD_NUMBER: _ClassVar[int]
-    DIR_ID_FIELD_NUMBER: _ClassVar[int]
-    FILE_ID_FIELD_NUMBER: _ClassVar[int]
+    NUM_FILES_FIELD_NUMBER: _ClassVar[int]
+    NUM_DIRS_FIELD_NUMBER: _ClassVar[int]
+    FILE_IDS_FIELD_NUMBER: _ClassVar[int]
+    DIR_IDS_FIELD_NUMBER: _ClassVar[int]
     schema_version: int
     run_id: int
     id: int
     parent_id: int
     path: str
     date_time: float
-    all_hash: bytes
-    files_hash: bytes
-    dirs_hash: bytes
-    num_entries: int
-    dir_id: _containers.RepeatedScalarFieldContainer[int]
-    file_id: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, schema_version: _Optional[int] = ..., run_id: _Optional[int] = ..., id: _Optional[int] = ..., parent_id: _Optional[int] = ..., path: _Optional[str] = ..., date_time: _Optional[float] = ..., all_hash: _Optional[bytes] = ..., files_hash: _Optional[bytes] = ..., dirs_hash: _Optional[bytes] = ..., num_entries: _Optional[int] = ..., dir_id: _Optional[_Iterable[int]] = ..., file_id: _Optional[_Iterable[int]] = ...) -> None: ...
+    all_hash: str
+    files_hash: str
+    dirs_hash: str
+    num_files: int
+    num_dirs: int
+    file_ids: _containers.RepeatedScalarFieldContainer[int]
+    dir_ids: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, schema_version: _Optional[int] = ..., run_id: _Optional[int] = ..., id: _Optional[int] = ..., parent_id: _Optional[int] = ..., path: _Optional[str] = ..., date_time: _Optional[float] = ..., all_hash: _Optional[str] = ..., files_hash: _Optional[str] = ..., dirs_hash: _Optional[str] = ..., num_files: _Optional[int] = ..., num_dirs: _Optional[int] = ..., file_ids: _Optional[_Iterable[int]] = ..., dir_ids: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class FileRecord(_message.Message):
     __slots__ = ["schema_version", "run_id", "id", "name", "dir_id", "date_time", "length", "hash"]
@@ -87,5 +89,5 @@ class FileRecord(_message.Message):
     dir_id: int
     date_time: float
     length: int
-    hash: bytes
-    def __init__(self, schema_version: _Optional[int] = ..., run_id: _Optional[int] = ..., id: _Optional[int] = ..., name: _Optional[str] = ..., dir_id: _Optional[int] = ..., date_time: _Optional[float] = ..., length: _Optional[int] = ..., hash: _Optional[bytes] = ...) -> None: ...
+    hash: str
+    def __init__(self, schema_version: _Optional[int] = ..., run_id: _Optional[int] = ..., id: _Optional[int] = ..., name: _Optional[str] = ..., dir_id: _Optional[int] = ..., date_time: _Optional[float] = ..., length: _Optional[int] = ..., hash: _Optional[str] = ...) -> None: ...

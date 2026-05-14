@@ -9,7 +9,7 @@ from typing import Optional
 import lmdb
 from google.protobuf.message import EncodeError, DecodeError
 
-from identifier import Id
+from identifier import Id, CompositeId
 # from lmdb_experi import mk_run_key
 # from enum import nonmember
 
@@ -141,17 +141,6 @@ class Db:
         if len(self.files_queue) > 3:
             self.put_files_batch()
 
-    def put_files_batch(self):
-        for file in self.files_queue.pop():
-            self.put_file(file)
-
-    def put_file(self, file: File):
-        # create file rec
-        # create file hash rec
-        # store both records
-        # update counter(s)
-        pass
-
 
     # def make_run_key(self, run_id: str) -> bytes:
     #     pass
@@ -191,11 +180,35 @@ class Db:
         num_dirs_stored.incr()
         logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
 
-    RUN_PREFIX = 'r'
-
     @staticmethod
     def mk_run_key(run_id: Id) -> bytes:
-        return run_id.to_bytes()
+        return b'r:' + run_id.to_bytes()
+
+    @staticmethod
+    def mk_dir_key(dir_id: Id) -> bytes:
+        return b'd:' + dir_id.to_bytes()
+
+    @classmethod
+    def mk_dir_dirs_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
+        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhd')
+
+    @classmethod
+    def mk_dir_files_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
+        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhf')
+
+    @staticmethod
+    def _mk_dir_hash_key(hash_1: str, hash_2: str, prefix: str) -> bytes:
+        assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
+        return b':'.join([prefix.encode(), bytes.fromhex(hash_1) + bytes.fromhex(hash_2)])
+
+    @staticmethod
+    def mk_file_key(file_id: Id) -> bytes:
+        return b'f:' + file_id.to_bytes()
+
+    @staticmethod
+    def mk_file_hash_key(hash_: str) -> bytes:
+        assert len(hash_) == 32
+        return b'fh:' + bytes.fromhex(hash_)
 
     @staticmethod
     def mk_run_rec(run: Run) -> bytes:
@@ -220,6 +233,44 @@ class Db:
             pass  # do what now?
             raise exc
 
+    @staticmethod
+    def mk_dir_rec(dir_: Dir) -> bytes:
+        rec = record_pb2.DirRecord(
+            schema_version=SCHEMA_VERSION,
+            run_id=dir_.run.id.val,
+            id=dir_.id.val,
+            path=str(dir_.path),
+            date_time=dir_.timestamp,
+            num_files=dir_.num_files,
+            num_dirs=dir_.num_dirs,
+            files_hash=dir_.files_hash,
+            dirs_hash=dir_.dirs_hash,
+            all_hash=dir_.all_hash,
+        )
+        if dir_.parent:
+            rec.parent_id = dir_.parent.id.val
+        if dir_.file_ids:
+            file_ids_int = [id_.val for id_ in dir_.file_ids]
+            rec.file_ids.extend(file_ids_int)
+        if dir_.dir_ids:
+            dir_ids_int = [id_.val for id_ in dir_.dir_ids]
+            rec.dir_ids.extend(dir_ids_int)
+        return rec.SerializeToString()
+
+    @staticmethod
+    def mk_file_rec(file: File) -> bytes:
+        rec = record_pb2.FileRecord(
+            schema_version=SCHEMA_VERSION,
+            run_id=file.run.id.val,
+            dir_id=file.dir.id.val,
+            id=file.id.val,
+            name=str(file.path.name),
+            date_time=file.creation_time,
+            length=file.length,
+            hash=file.hash,
+        )
+        return rec.SerializeToString()
+
     def put_run(self, run: Run):
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
@@ -233,6 +284,42 @@ class Db:
                 # do what?
                 raise exc
         logger.warning('Stored run %s', run.id)
+
+    def put_dir(self, dir_: Dir):
+        key_for_dir = self.mk_dir_key(dir_.id)
+        value_for_dir = self.mk_dir_rec(dir_)
+
+        key_for_dirs_hash = self.mk_dir_dirs_hash_key(dir_.dirs_hash, dir_.files_hash)
+        key_for_files_hash = self.mk_dir_files_hash_key(dir_.files_hash, dir_.dirs_hash)
+        value_for_hash = dir_.id.to_bytes()
+
+        with self.env.begin(write=True) as txn:
+            txn.put(key_for_dir, value_for_dir)
+            txn.put(key_for_dirs_hash, value_for_hash)
+            txn.put(key_for_files_hash, value_for_hash)
+
+        logger.warning('Stored dir %s', dir_.id)
+
+        # update counter(s)
+
+    def put_file(self, file: File):
+        key_for_file = self.mk_file_key(file.id)
+        value_for_file = self.mk_file_rec(file)
+
+        key_for_hash = self.mk_file_hash_key(file.hash)
+        value_for_hash = file.id.to_bytes()
+
+        with self.env.begin(write=True) as txn:
+            txn.put(key_for_file, value_for_file)
+            txn.put(key_for_hash, value_for_hash)
+
+        logger.warning('Stored file %s', file.id)
+
+        # update counter(s)
+
+    def put_files_batch(self):
+        for file in self.files_queue.pop():
+            self.put_file(file)
 
     def get_run(self, run_id: Id) -> Run:
         """Do I actually want a Run obj returned?

@@ -64,23 +64,26 @@ message DirRecord {
     // Directory timestamp captured during the scan.
     float date_time = 6;
 
-    // Overall hash of the directory (xxhash, 8 bytes).
-    bytes all_hash = 7;
-
     // Hash of the files in the directory (xxhash, 8 bytes).
-    bytes files_hash = 8;
+    string files_hash = 7;
 
     // Hash of the directories contained in the directory (xxhash, 8 bytes).
-    bytes dirs_hash = 9;
+    string dirs_hash = 8;
 
-    // Number of entries contained in this directory.
-    uint32 num_entries = 10;
+    // Overall hash of the directory (xxhash, 8 bytes).
+    string all_hash = 9;
 
-    // Identifiers of contained directories.
-    repeated uint32 dir_id = 11;
+    // Number of file entries in this directory.
+    uint32 num_files = 10;
+
+    // Number of directory entries in this directory.
+    uint32 num_dirs = 11;
 
     // Identifiers of contained files.
-    repeated uint32 file_id = 12;
+    repeated uint32 file_ids = 12;
+
+    // Identifiers of contained directories.
+    repeated uint32 dir_ids = 13;
 }
 
 // File metadata captured during a scan run.
@@ -107,5 +110,5 @@ message FileRecord {
     uint64 length = 7;
 
     // File hash (sha256).
-    bytes hash = 8;
+    string hash = 8;
 }

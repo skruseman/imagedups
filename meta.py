@@ -44,10 +44,10 @@ class Dir:
 
     parent: Optional[Dir] = None  # None for root dir
 
-    num_files: int = -1
-    num_dirs: int = -1
-    file_ids: list[str] = dataclasses.field(default_factory=list)
-    dir_ids: list[str] = dataclasses.field(default_factory=list)
+    num_files: int = 0
+    num_dirs: int = 0
+    file_ids: list[Id] = dataclasses.field(default_factory=list)
+    dir_ids: list[Id] = dataclasses.field(default_factory=list)
 
     file_hashes: list[str] = dataclasses.field(default_factory=list)
     dir_hashes: list[str] = dataclasses.field(default_factory=list)
