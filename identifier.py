@@ -78,6 +78,26 @@ class CompositeId(Id):
     # def _max_value(level: CompositeId.Level) -> int:
     #     return 256**CompositeId.NUM_BYTES[level] - 1
 
+    @classmethod
+    def bytes_to_bytes(cls, byte_str: bytes) -> tuple[bytes, ...]:
+        """Converts a byte string into a list of byte strings representing component values"""
+        parts_bytes = [byte_str[:super().NUM_BYTES]]
+        last_bytes = byte_str[super().NUM_BYTES:]
+        level = 0
+        while len(last_bytes) > 0:
+            level += 1
+            end_idx = cls.NUM_BYTES_BY_LEVEL[level]
+            assert len(last_bytes) >= end_idx, "Unexpected end of byte string"
+            parts_bytes.append(last_bytes[:end_idx])
+            last_bytes = last_bytes[end_idx:]
+        return tuple(parts_bytes)
+
+    @classmethod
+    def bytes_to_parts(cls, byte_str: bytes) -> tuple[int, ...]:
+        """Converts a byte string into a list of integers representing component values"""
+        parts_bytes = cls.bytes_to_bytes(byte_str)
+        return tuple(int.from_bytes(part) for part in parts_bytes)
+
     def __init__(self, base: Id):
         self.base = base
         self.level = 1
@@ -98,6 +118,17 @@ class CompositeId(Id):
         # super().__init__(new_value, num_bytes=num_bytes)
         # self._set_last_id(new_value)
 
+    def parts(self) -> tuple[int, ...]:
+        """Returns the component values of the identifier as a tuple."""
+        return tuple(self._parts())
+
+    def _parts(self) -> list[int]:
+        """Returns the component values of the identifier as a list."""
+        base = self.base
+        parts = base._parts() if isinstance(base, CompositeId) else [base.val]
+        parts.append(self.val)
+        return parts
+
     def to_bytes(self) -> bytes:
         return self.base.to_bytes() + super().to_bytes()
 
@@ -105,23 +136,4 @@ class CompositeId(Id):
         return CompositeId.__name__ + str(self)
 
     def __str__(self) -> str:
-        return str(tuple(self._list_values()))
-
-    def _list_values(self) -> list[int]:
-        if isinstance(self.base, CompositeId):
-            return self.base._list_values() + [self.val]
-        return [self.base.val, self.val]
-
-    # def _latest_id(self) -> int:
-    #     # msv = self._find_most_significant_value()
-    #     return CompositeId._latest_id_by_level[self.level]
-    #
-    # def _set_last_id(self, value):
-    #     # msv = self._find_most_significant_value()
-    #     CompositeId._latest_id_by_level[self.level] = value
-
-    # def _find_most_significant_value(self):
-    #     base = self.base
-    #     while isinstance(base, CompositeId):
-    #         base = base.base
-    #     return base.val
+        return str(self.parts())
