@@ -111,114 +111,6 @@ class Db:
                     return int.from_bytes(last_key[len(prefix):])
             return 0
 
-    def store_file(self, file: File):
-        #     global num_files_stored
-        #     num_files_stored.incr()
-        #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
-        self.files_queue.append(file)
-        if len(self.files_queue) > 3:
-            self.put_files_batch()
-
-    def store_dir(self, dir_: Dir):
-        # create records for the dir's hash and for the dir itself
-
-        global num_dirs_stored
-        num_dirs_stored.incr()
-        logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
-
-    @staticmethod
-    def mk_run_key(run_id: Id) -> bytes:
-        return b'r:' + run_id.to_bytes()
-
-    @staticmethod
-    def mk_dir_key(dir_id: Id) -> bytes:
-        return b'd:' + dir_id.to_bytes()
-
-    @classmethod
-    def mk_dir_dirs_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
-        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhd')
-
-    @classmethod
-    def mk_dir_files_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
-        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhf')
-
-    @staticmethod
-    def _mk_dir_hash_key(hash_1: str, hash_2: str, prefix: str) -> bytes:
-        # assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
-        if not hash_1:
-            return b''
-        return b':'.join([prefix.encode(), bytes.fromhex(hash_1) + bytes.fromhex(hash_2)])
-
-    @staticmethod
-    def mk_file_key(file_id: Id) -> bytes:
-        return b'f:' + file_id.to_bytes()
-
-    @staticmethod
-    def mk_file_hash_key(hash_: str) -> bytes:
-        # assert len(hash_) == 32
-        return b'fh:' + bytes.fromhex(hash_)
-
-    @staticmethod
-    def mk_run_rec(run: Run) -> bytes:
-        rec = record_pb2.RunRecord(
-            schema_version=SCHEMA_VERSION,
-            id=run.id.val,
-            path=str(run.path),
-            description=run.description,
-            platform=run.platform,
-            date_time=run.start_time,
-            dur_secs=run.duration,
-            status=run.status,
-            num_dirs=run.num_dirs,
-            num_files=run.num_files,
-            extra=run.extra,
-            error=run.error,
-        )
-
-        try:
-            return rec.SerializeToString()
-        except EncodeError as exc:
-            pass  # do what now?
-            raise exc
-
-    @staticmethod
-    def mk_dir_rec(dir_: Dir) -> bytes:
-        rec = record_pb2.DirRecord(
-            schema_version=SCHEMA_VERSION,
-            run_id=dir_.run.id.val,
-            id=dir_.id.val,
-            path=str(dir_.path),
-            date_time=dir_.timestamp,
-            num_files=dir_.num_files,
-            num_dirs=dir_.num_dirs,
-            files_hash=dir_.files_hash,
-            dirs_hash=dir_.dirs_hash,
-            all_hash=dir_.all_hash,
-        )
-        if dir_.parent:
-            rec.parent_id = dir_.parent.id.val
-        if dir_.file_ids:
-            file_ids_int = [id_.val for id_ in dir_.file_ids]
-            rec.file_ids.extend(file_ids_int)
-        if dir_.dir_ids:
-            dir_ids_int = [id_.val for id_ in dir_.dir_ids]
-            rec.dir_ids.extend(dir_ids_int)
-        return rec.SerializeToString()
-
-    @staticmethod
-    def mk_file_rec(file: File) -> bytes:
-        rec = record_pb2.FileRecord(
-            schema_version=SCHEMA_VERSION,
-            run_id=file.run.id.val,
-            dir_id=file.dir.id.val,
-            id=file.id.val,
-            name=str(file.path.name),
-            date_time=file.creation_time,
-            length=file.length,
-            hash=file.hash,
-        )
-        return rec.SerializeToString()
-
     def put_run(self, run: Run) -> bool:
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
@@ -329,3 +221,111 @@ class Db:
         # since we use lmdb, an upate is simply a re-write.
 
         self.put_run(run)
+
+    def store_file(self, file: File):
+        #     global num_files_stored
+        #     num_files_stored.incr()
+        #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
+        self.files_queue.append(file)
+        if len(self.files_queue) > 3:
+            self.put_files_batch()
+
+    def store_dir(self, dir_: Dir):
+        # create records for the dir's hash and for the dir itself
+
+        global num_dirs_stored
+        num_dirs_stored.incr()
+        logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
+
+    @staticmethod
+    def mk_run_key(run_id: Id) -> bytes:
+        return b'r:' + run_id.to_bytes()
+
+    @staticmethod
+    def mk_dir_key(dir_id: Id) -> bytes:
+        return b'd:' + dir_id.to_bytes()
+
+    @classmethod
+    def mk_dir_dirs_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
+        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhd')
+
+    @classmethod
+    def mk_dir_files_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
+        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhf')
+
+    @staticmethod
+    def _mk_dir_hash_key(hash_1: str, hash_2: str, prefix: str) -> bytes:
+        # assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
+        if not hash_1:
+            return b''
+        return b':'.join([prefix.encode(), bytes.fromhex(hash_1) + bytes.fromhex(hash_2)])
+
+    @staticmethod
+    def mk_file_key(file_id: Id) -> bytes:
+        return b'f:' + file_id.to_bytes()
+
+    @staticmethod
+    def mk_file_hash_key(hash_: str) -> bytes:
+        # assert len(hash_) == 32
+        return b'fh:' + bytes.fromhex(hash_)
+
+    @staticmethod
+    def mk_run_rec(run: Run) -> bytes:
+        rec = record_pb2.RunRecord(
+            schema_version=SCHEMA_VERSION,
+            id=run.id.val,
+            path=str(run.path),
+            description=run.description,
+            platform=run.platform,
+            date_time=run.start_time,
+            dur_secs=run.duration,
+            status=run.status,
+            num_dirs=run.num_dirs,
+            num_files=run.num_files,
+            extra=run.extra,
+            error=run.error,
+        )
+
+        try:
+            return rec.SerializeToString()
+        except EncodeError as exc:
+            pass  # do what now?
+            raise exc
+
+    @staticmethod
+    def mk_dir_rec(dir_: Dir) -> bytes:
+        rec = record_pb2.DirRecord(
+            schema_version=SCHEMA_VERSION,
+            run_id=dir_.run.id.val,
+            id=dir_.id.val,
+            path=str(dir_.path),
+            date_time=dir_.timestamp,
+            num_files=dir_.num_files,
+            num_dirs=dir_.num_dirs,
+            files_hash=dir_.files_hash,
+            dirs_hash=dir_.dirs_hash,
+            all_hash=dir_.all_hash,
+        )
+        if dir_.parent:
+            rec.parent_id = dir_.parent.id.val
+        if dir_.file_ids:
+            file_ids_int = [id_.val for id_ in dir_.file_ids]
+            rec.file_ids.extend(file_ids_int)
+        if dir_.dir_ids:
+            dir_ids_int = [id_.val for id_ in dir_.dir_ids]
+            rec.dir_ids.extend(dir_ids_int)
+        return rec.SerializeToString()
+
+    @staticmethod
+    def mk_file_rec(file: File) -> bytes:
+        rec = record_pb2.FileRecord(
+            schema_version=SCHEMA_VERSION,
+            run_id=file.run.id.val,
+            dir_id=file.dir.id.val,
+            id=file.id.val,
+            name=str(file.path.name),
+            date_time=file.creation_time,
+            length=file.length,
+            hash=file.hash,
+        )
+        return rec.SerializeToString()
