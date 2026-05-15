@@ -46,23 +46,6 @@ class Db:
     -
     """
 
-    # @staticmethod
-    # def create(path: str|Path, map_size: int, max_dbs: int) -> Db:
-    #     env = lmdb.open(
-    #         str(path),
-    #         map_size=MAP_SIZE,
-    #         max_dbs=max_dbs,
-    #         subdir=True,
-    #         create=True,
-    #         readonly=False,
-    #         lock=True,
-    #         sync=True,
-    #         metasync=True,
-    #         readahead=True,
-    #         meminit=False,
-    #     )
-    #     return Db(env)
-
     @staticmethod
     def open(
             path: Path = Path('.'),  # path to dir with data and lock file; can be relative?
@@ -112,66 +95,29 @@ class Db:
         self.files_queue = deque()
 
     def max_run_id(self) -> int:
-        prefix = b"r:"
-        max_id = 0
+        """Returns the highest int value in use as a Run identifier.
+
+        Relies on lmdb keys being in alph. order, and Run id's being
+        encoded to fixed byte length.
+        """
+        prefix = b'r:'
         last_key = b''
-        with self.env.begin() as txn:
-            with txn.cursor() as cur:
-                if cur.set_range(prefix):
-                    for key, _ in cur:
-                        if not key.startswith(prefix):
-                            break
-                        last_key = key
-
-        if last_key:
-            last_key_str = last_key.decode()
-            last_id_str = last_key_str.split(':')[1]
-            max_id = int.from_bytes(bytes.fromhex(last_id_str))
-
-            # or:
-            len_id = 2
-            # last_id_bytes = bytes.fromhex(last_key[len(prefix):])
-            last_id_bytes = bytes.fromhex(last_key[-len_id:])
-            max_id = int.from_bytes(last_id_bytes)
-
-        return max_id
+        with self.env.begin(write=False) as txn, txn.cursor() as cur:
+            if cur.set_range(prefix):
+                while cur.key().startswith(prefix):
+                    last_key = cur.key()
+                    cur.next()
+                if last_key:
+                    return int.from_bytes(last_key[len(prefix):])
+            return 0
 
     def store_file(self, file: File):
+        #     global num_files_stored
+        #     num_files_stored.incr()
+        #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
         self.files_queue.append(file)
         if len(self.files_queue) > 3:
             self.put_files_batch()
-
-
-    # def make_run_key(self, run_id: str) -> bytes:
-    #     pass
-
-    # def store_run_record(self, run: Run):
-    #     # key: ?
-    #     # value: ?
-    #     self.create_run_record(run)
-    #     pass
-
-
-    def store_file_record(self, file: File):
-        # key: file:<run id>:<id>
-        # value: full details
-        pass
-
-
-    def store_file_hash(self, file: File):
-        # sha256 file hash and file size as key
-        #   filehash:<hash>:<size>
-        # FileHashRecord as value, or empty string?  b''
-        pass
-
-
-    # def store_file(self, file: File):
-    #     # create records for the file's hash and for the file itself
-    #
-    #     global num_files_stored
-    #     num_files_stored.incr()
-    #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
-
 
     def store_dir(self, dir_: Dir):
         # create records for the dir's hash and for the dir itself
@@ -198,7 +144,9 @@ class Db:
 
     @staticmethod
     def _mk_dir_hash_key(hash_1: str, hash_2: str, prefix: str) -> bytes:
-        assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
+        # assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
+        if not hash_1:
+            return b''
         return b':'.join([prefix.encode(), bytes.fromhex(hash_1) + bytes.fromhex(hash_2)])
 
     @staticmethod
@@ -207,7 +155,7 @@ class Db:
 
     @staticmethod
     def mk_file_hash_key(hash_: str) -> bytes:
-        assert len(hash_) == 32
+        # assert len(hash_) == 32
         return b'fh:' + bytes.fromhex(hash_)
 
     @staticmethod
@@ -271,32 +219,36 @@ class Db:
         )
         return rec.SerializeToString()
 
-    def put_run(self, run: Run):
+    def put_run(self, run: Run) -> bool:
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
-        # print(key)
-        # print(value)
 
         with self.env.begin(write=True) as txn:
             try:
-                txn.put(key, value)
+                if not txn.put(key, value, overwrite=False):
+                    logger.warning(f'Key {key.decode()} already exists; no overwrite')
+                    return False
             except EncodeError as exc:
                 # do what?
                 raise exc
         logger.warning('Stored run %s', run.id)
+        return True
 
     def put_dir(self, dir_: Dir):
         key_for_dir = self.mk_dir_key(dir_.id)
         value_for_dir = self.mk_dir_rec(dir_)
 
-        key_for_dirs_hash = self.mk_dir_dirs_hash_key(dir_.dirs_hash, dir_.files_hash)
+        # write for both hashes (only if not empty); don't write all-hash?
         key_for_files_hash = self.mk_dir_files_hash_key(dir_.files_hash, dir_.dirs_hash)
+        key_for_dirs_hash = self.mk_dir_dirs_hash_key(dir_.dirs_hash, dir_.files_hash)
         value_for_hash = dir_.id.to_bytes()
 
         with self.env.begin(write=True) as txn:
-            txn.put(key_for_dir, value_for_dir)
-            txn.put(key_for_dirs_hash, value_for_hash)
-            txn.put(key_for_files_hash, value_for_hash)
+            txn.put(key_for_dir, value_for_dir, overwrite=False)
+            if key_for_files_hash:
+                txn.put(key_for_files_hash, value_for_hash, overwrite=False)
+            if key_for_dirs_hash:
+                txn.put(key_for_dirs_hash, value_for_hash, overwrite=False)
 
         logger.warning('Stored dir %s', dir_.id)
 
@@ -310,8 +262,8 @@ class Db:
         value_for_hash = file.id.to_bytes()
 
         with self.env.begin(write=True) as txn:
-            txn.put(key_for_file, value_for_file)
-            txn.put(key_for_hash, value_for_hash)
+            txn.put(key_for_file, value_for_file, overwrite=False)
+            txn.put(key_for_hash, value_for_hash, overwrite=False)
 
         logger.warning('Stored file %s', file.id)
 

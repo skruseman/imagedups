@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Iterable
+from uuid import UUID, uuid4
 
 from identifier import Id
 
@@ -26,26 +27,25 @@ class Run:
     end_time: float
     duration: float
     root_dir: Optional[Dir] = None
+    uuid: UUID = uuid4()
     extra: dict[str, str] = dataclasses.field(default_factory=dict)
     status: str = 'init'
     num_dirs: int = -1
     num_files: int = -1
     error: Optional[str] = None
+    tags: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclass(frozen=False)
 class Dir:
     run: Run
     id: Id
-    name: str
-    path: pathlib.Path
-    path_repr: str
+    path: pathlib.Path  # redundancy but speeds up comparing file locations
+    path_repr: str  # keep? what use?
     timestamp: float
 
     parent: Optional[Dir] = None  # None for root dir
 
-    num_files: int = 0
-    num_dirs: int = 0
     file_ids: list[Id] = dataclasses.field(default_factory=list)
     dir_ids: list[Id] = dataclasses.field(default_factory=list)
 
@@ -55,16 +55,18 @@ class Dir:
     dirs_hash: str = ''  # 16 hexits for xxhash.xxh3_64
 
     # the overall "all" hash to be passed to the parent dir
-    all_hash: str = ''  # 16 hexits for xxhash.xxh3_64
+    all_hash: str = ''  # 16 hexits; only store for debugging?
+
+    tags: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclass(frozen=False)
 class File:
     run: Run
+    dir: Dir
     id: Id
     name: str
-    path: pathlib.Path
-    dir: Dir
+    path: pathlib.Path  # overkill? use dir's path
     length: int = -1
 
     creation_time: Optional[float] = None
@@ -72,9 +74,11 @@ class File:
     # age_secs: Optional[float] = None
 
     hash: str = ""
-    hash_duration: float = -1
     hash_worker: Optional[str] = None
+    hash_duration: float = -1
     hash_error: Optional[str] = None
+
+    tags: list[str] = dataclasses.field(default_factory=list)
 
     IS_EMPTY_DIR_MARKER = 'File instance to mark an empty directory'
 

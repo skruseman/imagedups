@@ -10,38 +10,44 @@ message RunRecord {
     // Identifier for this run (unique within the database).
     uint32 id = 2;
 
+    // UUID, for identification across databases.
+    bytes uuid = 3;
+
     // Root directory (starting point) used by the run.
-    string path = 3;
+    string path = 4;
 
     // Optional human-readable label for the run.
-    string description = 4;
+    string description = 5;
 
     // Platform or host information captured for the run.
-    string platform = 5;
+    string platform = 6;
 
-    // Run start timestamp.
-    float date_time = 6;
+    // Start timestamp of the run.
+    float start_time = 7;
 
-    // Total runtime in seconds.
-    float dur_secs = 7;
+    // Total runtime of the run in seconds.
+    float dur_secs = 8;
 
     // Final run status, such as completed or failed.
-    string status = 8;
+    string status = 9;
 
-    // Identifier of the root directory.
-    uint32 root_id = 9;
+    // Identifier (composite) of the run's root directory.
+    bytes root_id = 10;
 
     // Number of directories seen during the run.
-    uint32 num_dirs = 10;
+    uint32 num_dirs = 11;
 
     // Number of files seen during the run.
-    uint32 num_files = 11;
+    uint32 num_files = 12;
 
     // Extra run metadata not represented by dedicated fields.
-    map<string,string> extra = 12;
+    map<string,string> extra = 13;
 
     // Error details when the run did not complete successfully.
-    string error = 13;
+    string error = 14;
+
+    // User tags.
+    repeated string tags = 15;
 }
 
 // Directory metadata captured during a scan run.
@@ -49,41 +55,33 @@ message DirRecord {
     // Version of this protobuf schema used when the record was written.
     uint32 schema_version = 1;
 
-    // Identifier of the run that produced this directory record.
-    uint32 run_id = 2;
-
     // Directory identifier unique within the run.
-    uint32 id = 3;
+    // This composite identifier contains the run id.
+    bytes id = 2;
 
-    // Parent directory identifier; 0 for root dir.
-    uint32 parent_id = 4;
+    // Parent directory identifier (composite); empty for root dir.
+    bytes parent_id = 3;
 
     // Path of the directory relative to the run's root directory; empty for root dir.
-    string path = 5;
+    string path = 4;
 
     // Directory timestamp captured during the scan.
-    float date_time = 6;
+    float date_time = 5;
 
     // Hash of the files in the directory (xxhash, 8 bytes).
-    string files_hash = 7;
+    string files_hash = 6;
 
     // Hash of the directories contained in the directory (xxhash, 8 bytes).
-    string dirs_hash = 8;
+    string dirs_hash = 7;
 
-    // Overall hash of the directory (xxhash, 8 bytes).
-    string all_hash = 9;
+    // Identifiers (composite) of contained files.
+    repeated bytes file_ids = 8;
 
-    // Number of file entries in this directory.
-    uint32 num_files = 10;
+    // Identifiers (composite) of contained directories.
+    repeated bytes dir_ids = 9;
 
-    // Number of directory entries in this directory.
-    uint32 num_dirs = 11;
-
-    // Identifiers of contained files.
-    repeated uint32 file_ids = 12;
-
-    // Identifiers of contained directories.
-    repeated uint32 dir_ids = 13;
+    // User tags.
+    repeated string tags = 10;
 }
 
 // File metadata captured during a scan run.
@@ -91,24 +89,22 @@ message FileRecord {
     // Version of this protobuf schema used when the record was written.
     uint32 schema_version = 1;
 
-    // Identifier of the run that produced this file record.
-    uint32 run_id = 2;
-
-    // File identifier unique within the run.
-    uint32 id = 3;
+    // File identifier, unique for the containing dir.
+    // This composite identifier contains the run and dir ids.
+    bytes id = 2;
 
     // File name.
-    string name = 4;
-
-    // Identifier of containing directory.
-    uint32 dir_id = 5;
+    string name = 3;
 
     // File timestamp captured during the scan.
-    float date_time = 6;
+    float date_time = 4;
 
     // File length.
-    uint64 length = 7;
+    uint64 length = 5;
 
     // File hash (sha256).
-    string hash = 8;
+    string hash = 6;
+
+    // User tags.
+    repeated string tags = 10;
 }
