@@ -4,7 +4,7 @@ import logging
 import re
 from collections import deque
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import lmdb
 from google.protobuf.message import EncodeError, DecodeError
@@ -111,22 +111,28 @@ class Db:
                     return int.from_bytes(last_key[len(prefix):])
             return 0
 
-    def put_run(self, run: Run) -> bool:
+    def put_run(self, run: Run):
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
 
         with self.env.begin(write=True) as txn:
             try:
                 if not txn.put(key, value, overwrite=False):
-                    logger.warning(f'Key {key.decode()} already exists; no overwrite')
-                    return False
+                    exc = ValueError(f'Database key {key} already exists')
+                    logger.error('Did not write Run object', exc_info=exc)
+                    raise exc
             except EncodeError as exc:
                 # do what?
                 raise exc
         logger.warning('Stored run %s', run.id)
-        return True
 
     def put_dir(self, dir_: Dir):
+        # create records for the dir's hash and for the dir itself
+
+        # global num_dirs_stored
+        # num_dirs_stored.incr()
+        # logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
+
         key_for_dir = self.mk_dir_key(dir_.id)
         value_for_dir = self.mk_dir_rec(dir_)
 
@@ -136,17 +142,33 @@ class Db:
         value_for_hash = dir_.id.to_bytes()
 
         with self.env.begin(write=True) as txn:
-            txn.put(key_for_dir, value_for_dir, overwrite=False)
+            if not txn.put(key_for_dir, value_for_dir, overwrite=False):
+                exc = ValueError(f'Database key {key_for_dir} already exists')
+                logger.error('Did not write Dir object', exc_info=exc)
+                raise exc
             if key_for_files_hash:
-                txn.put(key_for_files_hash, value_for_hash, overwrite=False)
+                if not txn.put(key_for_files_hash, value_for_hash, overwrite=False):
+                    exc = ValueError(f'Database key {key_for_files_hash} already exists')
+                    logger.error('Did not write Dir files-hash object', exc_info=exc)
+                    raise exc
             if key_for_dirs_hash:
-                txn.put(key_for_dirs_hash, value_for_hash, overwrite=False)
+                if not txn.put(key_for_dirs_hash, value_for_hash, overwrite=False):
+                    exc = ValueError(f'Database key {key_for_dirs_hash} already exists')
+                    logger.error('Did not write Dir dirs hash object', exc_info=exc)
+                    raise exc
 
         logger.warning('Stored dir %s', dir_.id)
 
         # update counter(s)
 
     def put_file(self, file: File):
+        #     global num_files_stored
+        #     num_files_stored.incr()
+        #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
+        # self.files_queue.append(file)
+        # if len(self.files_queue) > 3:
+        #     self.put_files_batch()
+
         key_for_file = self.mk_file_key(file.id)
         value_for_file = self.mk_file_rec(file)
 
@@ -154,8 +176,14 @@ class Db:
         value_for_hash = file.id.to_bytes()
 
         with self.env.begin(write=True) as txn:
-            txn.put(key_for_file, value_for_file, overwrite=False)
-            txn.put(key_for_hash, value_for_hash, overwrite=False)
+            if not txn.put(key_for_file, value_for_file, overwrite=False):
+                exc = ValueError(f'Database key {key_for_file} already exists')
+                logger.error('Did not write File object', exc_info=exc)
+                raise exc
+            if not txn.put(key_for_hash, value_for_hash, overwrite=False):
+                exc = ValueError(f'Database key {key_for_hash} already exists')
+                logger.error('Did not write File hash object', exc_info=exc)
+                raise exc
 
         logger.warning('Stored file %s', file.id)
 
@@ -222,21 +250,6 @@ class Db:
 
         self.put_run(run)
 
-    def store_file(self, file: File):
-        #     global num_files_stored
-        #     num_files_stored.incr()
-        #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
-        self.files_queue.append(file)
-        if len(self.files_queue) > 3:
-            self.put_files_batch()
-
-    def store_dir(self, dir_: Dir):
-        # create records for the dir's hash and for the dir itself
-
-        global num_dirs_stored
-        num_dirs_stored.incr()
-        logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
-
     @staticmethod
     def mk_run_key(run_id: Id) -> bytes:
         return b'r:' + run_id.to_bytes()
@@ -274,17 +287,21 @@ class Db:
         rec = record_pb2.RunRecord(
             schema_version=SCHEMA_VERSION,
             id=run.id.val,
+            uuid=run.uuid.bytes,
             path=str(run.path),
             description=run.description,
             platform=run.platform,
-            date_time=run.start_time,
+            start_time=run.start_time,
             dur_secs=run.duration,
             status=run.status,
+            root_id=cast(Dir, run.root_dir).id.to_bytes(),
             num_dirs=run.num_dirs,
             num_files=run.num_files,
             extra=run.extra,
             error=run.error,
         )
+        if run.tags:
+            rec.tags.extend(run.tags)
 
         try:
             return rec.SerializeToString()
@@ -296,36 +313,32 @@ class Db:
     def mk_dir_rec(dir_: Dir) -> bytes:
         rec = record_pb2.DirRecord(
             schema_version=SCHEMA_VERSION,
-            run_id=dir_.run.id.val,
-            id=dir_.id.val,
+            id=dir_.id.to_bytes(),
             path=str(dir_.path),
             date_time=dir_.timestamp,
-            num_files=dir_.num_files,
-            num_dirs=dir_.num_dirs,
             files_hash=dir_.files_hash,
             dirs_hash=dir_.dirs_hash,
-            all_hash=dir_.all_hash,
         )
         if dir_.parent:
-            rec.parent_id = dir_.parent.id.val
+            rec.parent_id = dir_.parent.id.to_bytes()
         if dir_.file_ids:
-            file_ids_int = [id_.val for id_ in dir_.file_ids]
-            rec.file_ids.extend(file_ids_int)
+            rec.file_ids.extend([id_.to_bytes() for id_ in dir_.file_ids])
         if dir_.dir_ids:
-            dir_ids_int = [id_.val for id_ in dir_.dir_ids]
-            rec.dir_ids.extend(dir_ids_int)
+            rec.dir_ids.extend([id_.to_bytes() for id_ in dir_.dir_ids])
+        if dir_.tags:
+            rec.tags.extend(dir_.tags)
         return rec.SerializeToString()
 
     @staticmethod
     def mk_file_rec(file: File) -> bytes:
         rec = record_pb2.FileRecord(
             schema_version=SCHEMA_VERSION,
-            run_id=file.run.id.val,
-            dir_id=file.dir.id.val,
-            id=file.id.val,
-            name=str(file.path.name),
+            id=file.id.to_bytes(),
+            name=file.name,
             date_time=file.creation_time,
             length=file.length,
             hash=file.hash,
         )
+        if file.tags:
+            rec.tags.extend(file.tags)
         return rec.SerializeToString()

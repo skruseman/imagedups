@@ -26,7 +26,7 @@ class Run:
     start_time: float
     end_time: float
     duration: float
-    root_dir: Optional[Dir] = None
+    root_dir: Optional[Dir] = None  # to be set after instantiation
     uuid: UUID = uuid4()
     extra: dict[str, str] = dataclasses.field(default_factory=dict)
     status: str = 'init'
@@ -66,7 +66,6 @@ class File:
     dir: Dir
     id: Id
     name: str
-    path: pathlib.Path  # overkill? use dir's path
     length: int = -1
 
     creation_time: Optional[float] = None
