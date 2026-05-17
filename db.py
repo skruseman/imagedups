@@ -127,6 +127,12 @@ class Db:
         logger.warning('Stored run %s', run.id)
 
     def put_dir(self, dir_: Dir):
+        """Add a key-value pair for the dir and for both its hash values.
+
+        The key-value pairs for the hashes contain both hashes, but in opposite
+        order. If one of the hashes is empty then the key-pair with that hash as
+        its first hash is NOT written.
+        """
         # create records for the dir's hash and for the dir itself
 
         # global num_dirs_stored
@@ -137,9 +143,9 @@ class Db:
         value_for_dir = self.mk_dir_rec(dir_)
 
         # write for both hashes (only if not empty); don't write all-hash?
-        key_for_files_hash = self.mk_dir_files_hash_key(dir_.files_hash, dir_.dirs_hash)
-        key_for_dirs_hash = self.mk_dir_dirs_hash_key(dir_.dirs_hash, dir_.files_hash)
-        value_for_hash = dir_.id.to_bytes()
+        key_for_files_hash = self.mk_dir_files_hash_key(dir_.id, dir_.files_hash, dir_.dirs_hash)
+        key_for_dirs_hash = self.mk_dir_dirs_hash_key(dir_.id, dir_.dirs_hash, dir_.files_hash)
+        value_for_hash = b''
 
         with self.env.begin(write=True) as txn:
             if not txn.put(key_for_dir, value_for_dir, overwrite=False):
@@ -172,8 +178,8 @@ class Db:
         key_for_file = self.mk_file_key(file.id)
         value_for_file = self.mk_file_rec(file)
 
-        key_for_hash = self.mk_file_hash_key(file.hash)
-        value_for_hash = file.id.to_bytes()
+        key_for_hash = self.mk_file_hash_key(file.id, file.hash)
+        value_for_hash = b''
 
         with self.env.begin(write=True) as txn:
             if not txn.put(key_for_file, value_for_file, overwrite=False):
@@ -258,29 +264,44 @@ class Db:
     def mk_dir_key(dir_id: Id) -> bytes:
         return b'd:' + dir_id.to_bytes()
 
-    @classmethod
-    def mk_dir_dirs_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
-        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhd')
-
-    @classmethod
-    def mk_dir_files_hash_key(cls, hash_1: str, hash_2: str) -> bytes:
-        return cls._mk_dir_hash_key(hash_1, hash_2, 'dhf')
-
-    @staticmethod
-    def _mk_dir_hash_key(hash_1: str, hash_2: str, prefix: str) -> bytes:
-        # assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
-        if not hash_1:
-            return b''
-        return b':'.join([prefix.encode(), bytes.fromhex(hash_1) + bytes.fromhex(hash_2)])
-
     @staticmethod
     def mk_file_key(file_id: Id) -> bytes:
         return b'f:' + file_id.to_bytes()
 
+    @classmethod
+    def mk_dir_dirs_hash_key(cls, id_: Id, hash_1: str, hash_2: str) -> bytes:
+        """Returns a bytes string to be used as key for a 'dir files hash' type of
+        key-value pair.
+
+        The key consists of the key-value pair prefix, both file hashes, and the
+        dir id, separated by b':'. The dir id serves to make keys unique.
+
+        If the first hash is empty then return an empty bytes string.
+        """
+        return cls._mk_dir_hash_key(id_, hash_1, hash_2, b'dhd')
+
+    @classmethod
+    def mk_dir_files_hash_key(cls, id_: Id, hash_1: str, hash_2: str) -> bytes:
+        return cls._mk_dir_hash_key(id_, hash_1, hash_2, b'dhf')
+
     @staticmethod
-    def mk_file_hash_key(hash_: str) -> bytes:
+    def _mk_dir_hash_key(id_: Id, hash_1: str, hash_2: str, prefix: bytes) -> bytes:
+        # assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
+        if not hash_1:
+            return b''
+        parts = [prefix, bytes.fromhex(hash_1), bytes.fromhex(hash_2), id_.to_bytes()]
+        return b':'.join(parts)
+
+    @staticmethod
+    def mk_file_hash_key(id_: Id, hash_: str) -> bytes:
+        """Returns a bytes string to be used as key for a 'file hash' type of
+        key-value pair.
+
+        The key consists of the key-value pair prefix, the file hash, and the
+        file id, separated by b':'. The file id serves to make keys unique.
+        """
         # assert len(hash_) == 32
-        return b'fh:' + bytes.fromhex(hash_)
+        return b':'.join([b'fh', bytes.fromhex(hash_), id_.to_bytes()])
 
     @staticmethod
     def mk_run_rec(run: Run) -> bytes:
