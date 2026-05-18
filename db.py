@@ -2,20 +2,16 @@ from __future__ import annotations
 
 import logging
 import re
+import lmdb
 from collections import deque
 from pathlib import Path
 from typing import Optional, cast
-
-import lmdb
 from google.protobuf.message import EncodeError, DecodeError
 
 from identifier import Id, CompositeId
-# from lmdb_experi import mk_run_key
-# from enum import nonmember
-
+import record_pb2
 from meta import File, Dir, Run
 from utils import Counter, SENTINEL
-import record_pb2
 
 SCHEMA_VERSION = 1
 MAP_SIZE = 2**32
@@ -25,7 +21,6 @@ TIMEOUT_SECS = 0.5
 TIMEOUT_SECS = 25
 
 logger = logging.getLogger(__name__)
-
 
 num_dirs_stored: Counter
 num_files_stored: Counter
@@ -80,10 +75,10 @@ class Db:
 
         except lmdb.Error as exc:
             if re.match('.*cannot find the path specified.*', exc.args[0]):
-                raise exc  # to be elab.
+                raise  # to be elab.
             else:
                 logger.warning(exc, exc_info=True)
-                raise exc
+                raise
 
         db_name = path.name
         logger.info('Opened database %s: readonly=%s', db_name, readonly)
@@ -111,20 +106,38 @@ class Db:
                     return int.from_bytes(last_key[len(prefix):])
             return 0
 
+    def add_run(self, run: Run):
+        """Add the Run object to the DB.
+
+        Raises KeyError if key already exists.
+        """
+        self.put_run(run)
+        logger.info('Added run %s', run.id)
+
+    def add_dir(self, dir_: Dir):
+        """Add the Dir object to the DB."""
+        self.put_dir(dir_)
+
+    def add_file(self, file: File):
+        """Add the File object to the DB."""
+        self.put_file(file)
+
+    def _add_kv_pair(self, key, value):
+        """Adds a kv pair for a non-existent key."""
+        assert isinstance(key, bytes)
+        assert isinstance(value, bytes)
+        assert key
+        with self.env.begin(write=True) as txn:
+            if not txn.put(key, value, overwrite=False):
+                # exc = ValueError(f'Key {key} already exists')
+                # log at higher level
+                # logger.error(f'Did not write pair for key {key}', exc_info=exc)
+                raise KeyError(f'{key} already exists')
+
     def put_run(self, run: Run):
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
-
-        with self.env.begin(write=True) as txn:
-            try:
-                if not txn.put(key, value, overwrite=False):
-                    exc = ValueError(f'Database key {key} already exists')
-                    logger.error('Did not write Run object', exc_info=exc)
-                    raise exc
-            except EncodeError as exc:
-                # do what?
-                raise exc
-        logger.warning('Stored run %s', run.id)
+        self._add_kv_pair(key, value)
 
     def put_dir(self, dir_: Dir):
         """Add a key-value pair for the dir and for both its hash values.
@@ -363,3 +376,8 @@ class Db:
         if file.tags:
             rec.tags.extend(file.tags)
         return rec.SerializeToString()
+
+    @staticmethod
+    def test_logging():
+        logger.info('dit is info')
+        logger.warning('dit is warning')
