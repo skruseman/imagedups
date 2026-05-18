@@ -13,7 +13,7 @@ class Id:
 
     def __init__(self, val: int):
         self.num_bytes = Id.NUM_BYTES
-        if val <= 0:
+        if val < 0:
             raise ValueError("Not a positive integer value")
         if val >= (256 ** self.num_bytes):
             raise ValueError("Exceeds max value")

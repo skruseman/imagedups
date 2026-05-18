@@ -13,9 +13,11 @@ import record_pb2
 from meta import File, Dir, Run
 from utils import Counter, SENTINEL
 
+# Schema version for protobuf record definitions
 SCHEMA_VERSION = 1
-MAP_SIZE = 2**32
-MAX_DBS = 0
+
+# lmdb max nr of kv-pairs
+MAP_SIZE = 2**32  # 4G
 
 TIMEOUT_SECS = 0.5
 TIMEOUT_SECS = 25
@@ -52,7 +54,7 @@ class Db:
         kwargs = dict(
             path=str(path),
             map_size=MAP_SIZE,
-            max_dbs=MAX_DBS,
+            max_dbs=0,
             subdir=True,
             create=create,
             readonly=readonly,
@@ -111,6 +113,7 @@ class Db:
 
         Raises KeyError if key already exists.
         """
+        assert run.id.val > 0, 'Run id must not be zero'
         self.put_run(run)
         logger.info('Added run %s', run.id)
 

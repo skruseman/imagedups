@@ -24,8 +24,8 @@ class Run:
     description: str
     platform: str
     start_time: float
-    end_time: float
-    duration: float
+    end_time: float = 1.23
+    duration: float = 2.45
     root_dir: Optional[Dir] = None  # to be set after instantiation
     uuid: UUID = uuid4()
     extra: dict[str, str] = dataclasses.field(default_factory=dict)

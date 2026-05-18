@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import Optional, Iterable
 import logging
+import pathlib
 import queue
+
+from typing import Optional, Iterable
 from collections import deque
 import xxhash
 
-from meta import File, Dir
 from utils import Counter, SENTINEL
-
+from identifier import Id
+from meta import Run, File, Dir
+from db import Db
 
 TIMEOUT_SECS = 0.5
 TIMEOUT_SECS = 25
@@ -17,17 +20,19 @@ logger = logging.getLogger(__name__)
 
 
 def collect_and_store(hashed_files: queue.Queue[File | object],
+                      run_obj: Run,
+                      db_path: str,
                       dirs_counter: Counter,
                       files_counter: Counter) -> None:
     """Processes entries from the queue and stores them in the database.
 
 
     """
-    Storage(dirs_counter, files_counter).run(hashed_files)
+    Storage(run_obj, db_path, dirs_counter, files_counter).run(hashed_files)
 
 
-class Storage:
-    """Don't use this class externally; use `collect_and_store` instead.
+class Storage:  # FIND BETTER NAME !! Also for method 'run'?
+    """Don't use this class externally; use function `collect_and_store` instead.
 
     This class calculates dir hashes, and will store file and dir hashes to the database.
     """
@@ -116,7 +121,7 @@ class Storage:
         return hasher.hexdigest()
 
 
-    def __init__(self, dirs_counter: Counter, files_counter: Counter):
+    def __init__(self, run_obj: Run, db_path: str, dirs_counter: Counter, files_counter: Counter):
         """This class ...
 
         This class is not thread-safe because it operates on shared Dir objects
@@ -124,6 +129,11 @@ class Storage:
         adding file/dir hashes and calculating group hashes would have to be made thread-safe.
         """
 
+        self.run_obj = run_obj
+        self.db = Db.open(path=pathlib.Path(db_path), create=False, readonly=False)
+        max_run_id = self.db.max_run_id()
+        run_obj.id = Id(max_run_id + 1)
+        logger.info('Assigned run ID: %s', run_obj.id)
         self.dirs_counter = dirs_counter
         self.files_counter = files_counter
 

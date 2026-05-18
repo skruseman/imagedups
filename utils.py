@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-import threading
 import logging
+import threading
 
-# marker: added to a queue signals end of input
+# marker: add to a queue to signal end of input
 SENTINEL = object()
 
 logger = logging.getLogger(__name__)
 
 
 class Counter:
-    """Thread safe counter, starting at 0."""
+    """Thread-safe counter, starting at 0."""
 
     def __init__(self):
         self.global_value: int = 0
-        self._lock = threading.Lock()
-        self.local = threading.local()
+        self._lock = threading.Lock()  # protect global value
+        self.local = threading.local()  # thread-local value
 
     def incr(self, n = 1) -> None:
         """Cache thread-local updates, to be flushed with self.flush()"""
@@ -34,6 +34,7 @@ class Counter:
             self._flush_unsafe()
 
     def value(self) -> int:
+        # Does not include local changes of other threads
         with self._lock:
             self._flush_unsafe()
             return self.global_value
