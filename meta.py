@@ -1,31 +1,37 @@
-# Provides dataclasses for passing meta-data
+# Provides dataclasses for passing metadata
 # on directories, files and runs.
 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
-import os
 import pathlib
-import queue
-import threading
-import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional, Iterable
+from typing import Optional, Any
 from uuid import UUID, uuid4
+from abc import ABC
 
 from identifier import Id
 
+
+class Item(ABC):
+
+    pass
+
+    # def get_id(self) -> Any|None:
+    #     # assert 'id' in self.__dict__
+    #     return getattr(self, 'id', None)
+
+
+
 @dataclass(frozen=False)
-class Run:
+class Run(Item):
     id: Id
     path: pathlib.Path
     description: str
     platform: str
-    start_time: float
-    end_time: float = 1.23
-    duration: float = 2.45
+    start_time: float = 0.0
+    end_time: float = 0.0
+    duration: float = 0.0
     root_dir: Optional[Dir] = None  # to be set after instantiation
     uuid: UUID = uuid4()
     extra: dict[str, str] = dataclasses.field(default_factory=dict)
@@ -37,7 +43,7 @@ class Run:
 
 
 @dataclass(frozen=False)
-class Dir:
+class Dir(Item):
     run: Run
     id: Id
     path: pathlib.Path  # redundancy but speeds up comparing file locations
@@ -61,7 +67,7 @@ class Dir:
 
 
 @dataclass(frozen=False)
-class File:
+class File(Item):
     run: Run
     dir: Dir
     id: Id

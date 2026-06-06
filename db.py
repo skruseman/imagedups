@@ -3,18 +3,19 @@ from __future__ import annotations
 import logging
 import re
 import lmdb
-from collections import deque
 from pathlib import Path
-from typing import Optional, cast
+from typing import cast, Iterable
 from google.protobuf.message import EncodeError, DecodeError
+from lmdb import Transaction
 
-from identifier import Id, CompositeId
+from db_constants import SCHEMA_VERSION
+from db_item_handler import DirHandler, FileHandler
+from db_item_handler import ItemHandler
+from identifier import Id
 import record_pb2
 from meta import File, Dir, Run
-from utils import Counter, SENTINEL
+from utils import Counter
 
-# Schema version for protobuf record definitions
-SCHEMA_VERSION = 1
 
 # lmdb max nr of kv-pairs
 MAP_SIZE = 2**32  # 4G
@@ -29,8 +30,10 @@ num_files_stored: Counter
 
 
 class Db:
-
     """
+    Serves as a proxy for storing our objects in an lmdb database.
+
+
     lmdb errors:
 
     MapFullError: mdb_put: MDB_MAP_FULL: Environment mapsize limit reached
@@ -49,7 +52,11 @@ class Db:
             *,
             readonly: bool = True,
             create: bool = False,
-    ) -> Db:  # lmdb env
+    ) -> Db:
+        """Sets up an LMDB environment for accessing the specified database,
+        wraps it in a Db object serving as a proxy for storing our objects,
+        and returns that Db object.
+        """
 
         kwargs = dict(
             path=str(path),
@@ -88,14 +95,16 @@ class Db:
 
     def __init__(self, lmdb_env: lmdb.Environment):
         self.env = lmdb_env
-        self.dirs_queue = deque()
-        self.files_queue = deque()
+
+        # item handlers (stateless)
+        self.dir_handler = DirHandler()
+        self.file_handler = FileHandler()
 
     def max_run_id(self) -> int:
-        """Returns the highest int value in use as a Run identifier.
+        """Returns the highest int value occurring in the database, representing a Run identifier.
 
-        Relies on lmdb keys being in alph. order, and Run id's being
-        encoded to fixed byte length.
+        Uses the lmdb feature that keys are always in alphabetical order,
+        and our design decision that Run id's are encoded to fixed byte length.
         """
         prefix = b'r:'
         last_key = b''
@@ -108,112 +117,107 @@ class Db:
                     return int.from_bytes(last_key[len(prefix):])
             return 0
 
+
     def add_run(self, run: Run):
         """Add the Run object to the DB.
 
         Raises KeyError if key already exists.
         """
         assert run.id.val > 0, 'Run id must not be zero'
-        self.put_run(run)
+        self._add_run(run)
         logger.info('Added run %s', run.id)
 
-    def add_dir(self, dir_: Dir):
-        """Add the Dir object to the DB."""
-        self.put_dir(dir_)
-
-    def add_file(self, file: File):
-        """Add the File object to the DB."""
-        self.put_file(file)
-
-    def _add_kv_pair(self, key, value):
-        """Adds a kv pair for a non-existent key."""
-        assert isinstance(key, bytes)
-        assert isinstance(value, bytes)
-        assert key
-        with self.env.begin(write=True) as txn:
-            if not txn.put(key, value, overwrite=False):
-                # exc = ValueError(f'Key {key} already exists')
-                # log at higher level
-                # logger.error(f'Did not write pair for key {key}', exc_info=exc)
-                raise KeyError(f'{key} already exists')
-
-    def put_run(self, run: Run):
+    def _add_run(self, run: Run):
         key = self.mk_run_key(run.id)
         value = self.mk_run_rec(run)
         self._add_kv_pair(key, value)
 
-    def put_dir(self, dir_: Dir):
-        """Add a key-value pair for the dir and for both its hash values.
+    @staticmethod
+    def mk_run_key(run_id: Id) -> bytes:
+        return b'r:' + run_id.to_bytes()
 
-        The key-value pairs for the hashes contain both hashes, but in opposite
-        order. If one of the hashes is empty then the key-pair with that hash as
-        its first hash is NOT written.
+    @staticmethod
+    def mk_run_rec(run: Run) -> bytes:
+        rec = record_pb2.RunRecord(
+            schema_version=SCHEMA_VERSION,
+            id=run.id.val,
+            uuid=run.uuid.bytes,
+            path=str(run.path),
+            description=run.description,
+            platform=run.platform,
+            start_time=run.start_time,
+            dur_secs=run.duration,
+            status=run.status,
+            root_id=cast(Dir, run.root_dir).id.to_bytes(),
+            num_dirs=run.num_dirs,
+            num_files=run.num_files,
+            extra=run.extra,
+            error=run.error,
+        )
+        if run.tags:
+            rec.tags.extend(run.tags)
+
+        try:
+            return rec.SerializeToString()
+        except EncodeError as exc:
+            pass  # do what now?
+            raise exc
+
+
+    def add_dir(self, dir_: Dir):
+        self.add_dirs([dir_])
+
+    def add_dirs(self, dirs: Iterable[Dir]):
+        self._add_items(dirs, self.dir_handler)
+
+    def add_file(self, file: File):
+        self.add_files([file])
+
+    def add_files(self, files: Iterable[File]):
+        self._add_items(files, self.file_handler)
+
+    def add_item(self, item: Dir|File):
+        self.add_items([item])
+
+    def add_items(self, items: Iterable[Dir|File]):
+        self._add_items(items)
+
+    def _add_items(self, items: Iterable[Dir | File], handler: DirHandler | FileHandler | None = None):
+        """Adds key-value pairs for the specified items to the database using the handler.
+        If no handler is specified then the correct handler (for the item) type is looked up.
+        Each key should not yet exist in the database or a KeyError is raised.
         """
-        # create records for the dir's hash and for the dir itself
-
-        # global num_dirs_stored
-        # num_dirs_stored.incr()
-        # logger.debug('Stored dir %s (hash: %s | %s)', dir_.id, dir_.files_hash[:8], dir_.dirs_hash[:8])
-
-        key_for_dir = self.mk_dir_key(dir_.id)
-        value_for_dir = self.mk_dir_rec(dir_)
-
-        # write for both hashes (only if not empty); don't write all-hash?
-        key_for_files_hash = self.mk_dir_files_hash_key(dir_.id, dir_.files_hash, dir_.dirs_hash)
-        key_for_dirs_hash = self.mk_dir_dirs_hash_key(dir_.id, dir_.dirs_hash, dir_.files_hash)
-        value_for_hash = b''
-
         with self.env.begin(write=True) as txn:
-            if not txn.put(key_for_dir, value_for_dir, overwrite=False):
-                exc = ValueError(f'Database key {key_for_dir} already exists')
-                logger.error('Did not write Dir object', exc_info=exc)
-                raise exc
-            if key_for_files_hash:
-                if not txn.put(key_for_files_hash, value_for_hash, overwrite=False):
-                    exc = ValueError(f'Database key {key_for_files_hash} already exists')
-                    logger.error('Did not write Dir files-hash object', exc_info=exc)
-                    raise exc
-            if key_for_dirs_hash:
-                if not txn.put(key_for_dirs_hash, value_for_hash, overwrite=False):
-                    exc = ValueError(f'Database key {key_for_dirs_hash} already exists')
-                    logger.error('Did not write Dir dirs hash object', exc_info=exc)
-                    raise exc
+            for item in items:
+                handler_ = handler or self._get_handler(item)
+                handler_ = cast(ItemHandler[Dir | File], handler_)
+                try:
+                    self._add_kv_pairs(item, handler_, txn)
+                except:
+                    # transaction aborts implicitly
+                    logger.exception('Failed to add item: %s\n'
+                                     'Transaction aborts: %s', item.id, txn.stat())
+                    raise
+        item_ids = '; '.join(str(item.id) for item in items)
+        logger.debug('Items added: %s', item_ids)
 
-        logger.warning('Stored dir %s', dir_.id)
+    @staticmethod
+    def _add_kv_pairs(item: Dir | File, handler: ItemHandler[Dir|File], txn: Transaction):
+        for key, value in handler.mk_kv_pairs(item):
+            # assert key
+            if not txn.put(key, value, overwrite=False):
+                logger.fatal('Failed to add key %s', key)
+                raise KeyError(f'{key} already exists')
+            logger.debug('Added key %s', key)
 
-        # update counter(s)
+    def _get_handler(self, item: Dir | File) -> DirHandler | FileHandler:
+        """Here's the only location where we differentiate between Dir and File."""
+        if isinstance(item, Dir):
+            return self.dir_handler
+        if isinstance(item, File):
+            return self.file_handler
+        raise TypeError(f"Unsupported item type: {type(item).__name__}")
 
-    def put_file(self, file: File):
-        #     global num_files_stored
-        #     num_files_stored.incr()
-        #     logger.debug('Stored file %s (hash: %s)', file.id, file.hash[:8])
-        # self.files_queue.append(file)
-        # if len(self.files_queue) > 3:
-        #     self.put_files_batch()
-
-        key_for_file = self.mk_file_key(file.id)
-        value_for_file = self.mk_file_rec(file)
-
-        key_for_hash = self.mk_file_hash_key(file.id, file.hash)
-        value_for_hash = b''
-
-        with self.env.begin(write=True) as txn:
-            if not txn.put(key_for_file, value_for_file, overwrite=False):
-                exc = ValueError(f'Database key {key_for_file} already exists')
-                logger.error('Did not write File object', exc_info=exc)
-                raise exc
-            if not txn.put(key_for_hash, value_for_hash, overwrite=False):
-                exc = ValueError(f'Database key {key_for_hash} already exists')
-                logger.error('Did not write File hash object', exc_info=exc)
-                raise exc
-
-        logger.warning('Stored file %s', file.id)
-
-        # update counter(s)
-
-    def put_files_batch(self):
-        for file in self.files_queue.pop():
-            self.put_file(file)
 
     def get_run(self, run_id: Id) -> Run:
         """Do I actually want a Run obj returned?
@@ -253,8 +257,7 @@ class Db:
             path=Path(run_rec.path),
             description=run_rec.description,
             platform=run_rec.platform,
-            start_time=run_rec.date_time,
-            end_time=run_rec.date_time,
+            start_time=run_rec.start_time,
             duration=run_rec.dur_secs,
             extra=dict(run_rec.extra),
             status=run_rec.status,
@@ -268,119 +271,6 @@ class Db:
         # update the relevant Run record with the changed values;
         # for finishing a run
         #
-        # since we use lmdb, an upate is simply a re-write.
+        # since we use lmdb, an update is simply a re-write.
 
-        self.put_run(run)
-
-    @staticmethod
-    def mk_run_key(run_id: Id) -> bytes:
-        return b'r:' + run_id.to_bytes()
-
-    @staticmethod
-    def mk_dir_key(dir_id: Id) -> bytes:
-        return b'd:' + dir_id.to_bytes()
-
-    @staticmethod
-    def mk_file_key(file_id: Id) -> bytes:
-        return b'f:' + file_id.to_bytes()
-
-    @classmethod
-    def mk_dir_dirs_hash_key(cls, id_: Id, hash_1: str, hash_2: str) -> bytes:
-        """Returns a bytes string to be used as key for a 'dir files hash' type of
-        key-value pair.
-
-        The key consists of the key-value pair prefix, both file hashes, and the
-        dir id, separated by b':'. The dir id serves to make keys unique.
-
-        If the first hash is empty then return an empty bytes string.
-        """
-        return cls._mk_dir_hash_key(id_, hash_1, hash_2, b'dhd')
-
-    @classmethod
-    def mk_dir_files_hash_key(cls, id_: Id, hash_1: str, hash_2: str) -> bytes:
-        return cls._mk_dir_hash_key(id_, hash_1, hash_2, b'dhf')
-
-    @staticmethod
-    def _mk_dir_hash_key(id_: Id, hash_1: str, hash_2: str, prefix: bytes) -> bytes:
-        # assert len(hash_1) in (0, 8) and len(hash_2) in (0, 8)
-        if not hash_1:
-            return b''
-        parts = [prefix, bytes.fromhex(hash_1), bytes.fromhex(hash_2), id_.to_bytes()]
-        return b':'.join(parts)
-
-    @staticmethod
-    def mk_file_hash_key(id_: Id, hash_: str) -> bytes:
-        """Returns a bytes string to be used as key for a 'file hash' type of
-        key-value pair.
-
-        The key consists of the key-value pair prefix, the file hash, and the
-        file id, separated by b':'. The file id serves to make keys unique.
-        """
-        # assert len(hash_) == 32
-        return b':'.join([b'fh', bytes.fromhex(hash_), id_.to_bytes()])
-
-    @staticmethod
-    def mk_run_rec(run: Run) -> bytes:
-        rec = record_pb2.RunRecord(
-            schema_version=SCHEMA_VERSION,
-            id=run.id.val,
-            uuid=run.uuid.bytes,
-            path=str(run.path),
-            description=run.description,
-            platform=run.platform,
-            start_time=run.start_time,
-            dur_secs=run.duration,
-            status=run.status,
-            root_id=cast(Dir, run.root_dir).id.to_bytes(),
-            num_dirs=run.num_dirs,
-            num_files=run.num_files,
-            extra=run.extra,
-            error=run.error,
-        )
-        if run.tags:
-            rec.tags.extend(run.tags)
-
-        try:
-            return rec.SerializeToString()
-        except EncodeError as exc:
-            pass  # do what now?
-            raise exc
-
-    @staticmethod
-    def mk_dir_rec(dir_: Dir) -> bytes:
-        rec = record_pb2.DirRecord(
-            schema_version=SCHEMA_VERSION,
-            id=dir_.id.to_bytes(),
-            path=str(dir_.path),
-            date_time=dir_.timestamp,
-            files_hash=dir_.files_hash,
-            dirs_hash=dir_.dirs_hash,
-        )
-        if dir_.parent:
-            rec.parent_id = dir_.parent.id.to_bytes()
-        if dir_.file_ids:
-            rec.file_ids.extend([id_.to_bytes() for id_ in dir_.file_ids])
-        if dir_.dir_ids:
-            rec.dir_ids.extend([id_.to_bytes() for id_ in dir_.dir_ids])
-        if dir_.tags:
-            rec.tags.extend(dir_.tags)
-        return rec.SerializeToString()
-
-    @staticmethod
-    def mk_file_rec(file: File) -> bytes:
-        rec = record_pb2.FileRecord(
-            schema_version=SCHEMA_VERSION,
-            id=file.id.to_bytes(),
-            name=file.name,
-            date_time=file.creation_time,
-            length=file.length,
-            hash=file.hash,
-        )
-        if file.tags:
-            rec.tags.extend(file.tags)
-        return rec.SerializeToString()
-
-    @staticmethod
-    def test_logging():
-        logger.info('dit is info')
-        logger.warning('dit is warning')
+        self._add_run(run)

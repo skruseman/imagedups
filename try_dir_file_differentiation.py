@@ -44,14 +44,15 @@ def do_strs(strs: Iterable[str]):
 def do_ints(ints: Iterable[int]):
     _do_items(ints, IntHandler())
 
-def _do_items(items: Iterable[int | str], handler: StrHandler | IntHandler | None = None):
+def _do_items(items: Iterable[str | int], handler: StrHandler | IntHandler | None = None):
     """In this design static typing won't help me prevent cases where a type
     specific handler is passed while the input contains items of a different type."""
     with open('some_file', 'w') as f:
         for item in items:
             handler_ = handler or _get_handler(item)
-            cast(ItemHandler[int | str], handler_).print(item)
+            handler_ = cast(ItemHandler[str | int], handler_)
 
+            handler_.print(item)
             f.write(f'{item}\n')
 
 
