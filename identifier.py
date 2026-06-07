@@ -108,7 +108,7 @@ class CompositeId(Id):
         last_value = CompositeId._last_value_by_base.get(key, 0)
         new_value = last_value + 1
         num_bytes = CompositeId.NUM_BYTES_BY_LEVEL.get(self.level, CompositeId.DEFAULT_NUM_BYTES)
-        assert new_value < 2**num_bytes
+        assert new_value < 2**(num_bytes*8)
         super().__init__(new_value)
         CompositeId._last_value_by_base[key] = new_value
 
