@@ -6,7 +6,6 @@ class Id:
     Values are provided by the user and should be positive integers > 1 and
     < 256**N where N is the number of bytes.
     Uniqueness is not supported; if so desired, it is the responsibility of the user.
-    Specialized testing for equality of instances is not supported.
     """
 
     NUM_BYTES = 2
@@ -30,6 +29,14 @@ class Id:
 
     def __str__(self) -> str:
         return str(self.val)
+
+    def __eq__(self, other: Id) -> bool:
+        if type(other) is not type(self):  # be strict to prevent matching Id with CompositeId
+            return NotImplemented
+        return self.val == other.val
+
+    def __hash__(self) -> int:
+        return hash(self.val)
 
 
 class CompositeId(Id):
@@ -137,3 +144,11 @@ class CompositeId(Id):
 
     def __str__(self) -> str:
         return str(self.parts())
+
+    def __eq__(self, other: CompositeId) -> bool:
+        if not isinstance(other, CompositeId):
+            return NotImplemented
+        return (self.base, self.val) == (other.base, other.val)
+
+    def __hash__(self) -> int:
+        return hash((self.base, self.val))
