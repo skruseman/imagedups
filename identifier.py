@@ -82,31 +82,18 @@ class CompositeId(Id):
     _last_value_by_base = {}
 
     @classmethod
-    def from_bytes(cls, byte_str: bytes) -> Id:
+    def from_bytes(cls, bytes_obj: bytes) -> Id:
         """Creates a new instance from the provided bytes.
 
         This will not touch the class' internal registry of last used partial ID values.
         So, if after generating CompositeId(42, 1) you construct from bytes CompositeId(42, 7),
         the next generated CompositeId will simply become (42, 2).
         """
-        first_part_bytes = byte_str[:super().NUM_BYTES]
-        remaining_bytes = byte_str[super().NUM_BYTES:]
-        parts_bytes = [first_part_bytes]
-        level = 1
-
-        id_ = super().from_bytes(first_part_bytes)
-
-        while remaining_bytes:
-            num_bytes = CompositeId.NUM_BYTES_BY_LEVEL.get(level, CompositeId.DEFAULT_NUM_BYTES)
-            if len(remaining_bytes) < num_bytes:
-                raise ValueError(
-                    f'Level {level} partial ID values require {num_bytes} bytes; '
-                    f'got only {len(remaining_bytes)}')
-            value = int.from_bytes(remaining_bytes[:num_bytes])
+        parts_bytes = cls._bytes_to_parts_bytes(bytes_obj)
+        id_ = super().from_bytes(parts_bytes[0])
+        for level in range(1, len(parts_bytes)):
             base, id_ = id_, cls.__new__(cls)
-            id_._initialize(base, value, level)
-            remaining_bytes = remaining_bytes[num_bytes:]
-            level += 1
+            id_._initialize(base, int.from_bytes(parts_bytes[level]), level)
         return id_
 
     @classmethod
@@ -170,7 +157,6 @@ class CompositeId(Id):
         super().__init__(value)
         self.base = base
         self.level = level
-
 
     def parts(self) -> tuple[int, ...]:
             """Returns the component values of the identifier as a tuple."""
