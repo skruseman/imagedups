@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, cast, List
 
 
 class Id:
@@ -89,16 +89,24 @@ class CompositeId(Id):
         So, if after generating CompositeId(42, 1) you construct from bytes CompositeId(42, 7),
         the next generated CompositeId will simply become (42, 2).
         """
-        parts_bytes = cls._bytes_to_parts_bytes(bytes_obj)
-        id_ = super().from_bytes(parts_bytes[0])
-        for level in range(1, len(parts_bytes)):
-            base, id_ = id_, cls.__new__(cls)
-            id_._initialize(base, int.from_bytes(parts_bytes[level]), level)
-        return id_
+        parts = cls.bytes_to_parts(bytes_obj)
+        ident = Id(parts[0])
+        for level in range(1, len(parts)):
+            base, ident = ident, cls.__new__(cls)
+            ident._initialize(base, parts[level], level)
+        return ident
 
     @classmethod
-    def _bytes_to_parts_bytes(cls, byte_str: bytes) -> tuple[bytes, ...]:
-        """Creates from a bytes object a tuple of bytes objects representing component values
+    def bytes_to_parts(cls, byte_str: bytes) -> tuple[int, ...]:
+        """Creates from a bytes object a list of integers representing
+        CompositeId component values.
+        """
+        parts_bytes = cls._bytes_to_parts_bytes(byte_str)
+        return tuple(int.from_bytes(part) for part in parts_bytes)
+
+    @classmethod
+    def _bytes_to_parts_bytes(cls, byte_str: bytes) -> List[bytes]:
+        """Creates from a bytes object a list of bytes objects representing component values
         of a CompositeId object."""
         index = super().NUM_BYTES
         parts = [byte_str[:index]]
@@ -113,13 +121,7 @@ class CompositeId(Id):
             parts.append(remaining_bytes[:index])
             remaining_bytes = remaining_bytes[index:]
             level += 1
-        return tuple(parts)
-
-    @classmethod
-    def bytes_to_parts(cls, byte_str: bytes) -> tuple[int, ...]:
-        """Converts a bytes object into a list of integers representing component values"""
-        parts_bytes = cls._bytes_to_parts_bytes(byte_str)
-        return tuple(int.from_bytes(part) for part in parts_bytes)
+        return parts
 
 
     def __init__(self, base: Id):
